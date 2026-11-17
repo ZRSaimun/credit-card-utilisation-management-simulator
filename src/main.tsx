@@ -49,6 +49,8 @@ function FinancialMathLab() {
 function App() {
   const [cards, setCards] = useState<Card[]>(initialCards);
   const [darkMode, setDarkMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [tab, setTab] = useState("Dashboard");
   const [edit, setEdit] = useState<Card | null>(null);
   const [external, setExternal] = useState(false);
@@ -182,9 +184,9 @@ function App() {
             Educational model · every event is simulated
           </p>
         </div>
-        <div className="header-actions"><button className="theme-toggle" onClick={()=>setDarkMode(v=>!v)} aria-label="Toggle colour theme">{darkMode ? "☀ Light" : "◐ Dark"}</button><span className="badge">SIMULATION ONLY</span></div>
+        <div className="header-actions"><button className="theme-toggle" onClick={()=>setDarkMode(v=>!v)} aria-label="Toggle colour theme">{darkMode ? "☀ Light" : "◐ Dark"}</button><button className="theme-toggle" onClick={()=>setPresentationMode(v=>!v)}>{presentationMode ? "Exit presentation" : "Presentation mode"}</button><span className="badge">SIMULATION ONLY</span></div>
       </header>
-      <nav>
+      {!presentationMode && <nav>
         {[
           "Dashboard",
           "Cards",
@@ -202,7 +204,7 @@ function App() {
             {x}
           </button>
         ))}
-      </nav>
+      </nav>}
       {tab === "Dashboard" && (
         <>
           <section className="notice">
@@ -351,7 +353,7 @@ function App() {
                     {c.balance < 0 ? <span className="pill red">Negative balance</span> : c.balance > c.limit ? <span className="pill red">Over limit</span> : <span className="pill green">Within limit</span>}
                   </td>
                   <td>
-                    <button onClick={() => setEdit(c)}>Edit</button>
+                    <button onClick={() => setEdit(c)}>Edit</button><button onClick={() => setSelectedCard(c)}>View</button>
                     <button
                       onClick={() =>
                         setCards((cs) => cs.filter((x) => x !== c))
@@ -678,6 +680,7 @@ function App() {
           <pre>{buildReport(cards, status, events)}</pre>
         </section>
       )}
+      {selectedCard && <div className="drawer-backdrop" onClick={()=>setSelectedCard(null)}><aside className="detail-drawer" onClick={e=>e.stopPropagation()}><button className="drawer-close" onClick={()=>setSelectedCard(null)} aria-label="Close card details">×</button><span className="eyebrow">CARD DETAIL</span><h2>{selectedCard.name}</h2><p className="muted">{selectedCard.provider}</p><div className="drawer-grid"><div><span>Balance</span><b>{formatGBP(selectedCard.balance)}</b></div><div><span>Credit limit</span><b>{formatGBP(selectedCard.limit)}</b></div><div><span>Utilisation</span><b>{(selectedCard.balance/selectedCard.limit*100).toFixed(1)}%</b></div><div><span>Available</span><b>{formatGBP(selectedCard.limit-selectedCard.balance)}</b></div><div><span>Statement</span><b>{selectedCard.statement ?? "Missing"}</b></div><div><span>Direct Debit</span><b>{selectedCard.dd ?? "Missing"}</b></div></div><div className="callout">50% target balance: <b>{formatGBP(selectedCard.limit*.5)}</b><br/>Amount above target: <b>{formatGBP(Math.max(0,selectedCard.balance-selectedCard.limit*.5))}</b></div></aside></div>}
       <footer>
         Prototype v0.3 · Simulation Only · No banking integrations
       </footer>
