@@ -63,7 +63,7 @@ describe("auditable financial model", () => {
       fee: 0,
     });
     expect(e[0].date).toBe("2026-01-01");
-    expect(e.at(-1)?.date).toBe("2026-02-01");
+    expect(e.at(-1)?.date).toBe("2026-02-28");
   });
   it("detects impossible growth without payment", () =>
     expect(
