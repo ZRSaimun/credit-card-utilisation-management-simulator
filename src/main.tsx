@@ -320,6 +320,7 @@ function App() {
                 <th>Statement</th>
                 <th>DD</th>
                 <th>Utilisation</th>
+                <th>Audit flag</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -342,6 +343,9 @@ function App() {
                     >
                       {((c.balance / c.limit) * 100).toFixed(1)}%
                     </span>
+                  </td>
+                  <td>
+                    {c.balance < 0 ? <span className="pill red">Negative balance</span> : c.balance > c.limit ? <span className="pill red">Over limit</span> : <span className="pill green">Within limit</span>}
                   </td>
                   <td>
                     <button onClick={() => setEdit(c)}>Edit</button>
