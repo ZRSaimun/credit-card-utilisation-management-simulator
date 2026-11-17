@@ -1,0 +1,3 @@
+import{describe,it,expect}from'vitest';import{amortisation,dailyInterest,effectiveAnnualRate,fixedPayment,monthlyRateFromAPR,payoffMonths}from'./financialMath';
+describe('financial mathematics lab',()=>{it('converts APR to monthly rate',()=>expect(monthlyRateFromAPR(24)).toBeCloseTo(.02));it('calculates EAR',()=>expect(effectiveAnnualRate(24)).toBeCloseTo(26.82,1));it('calculates day-count interest',()=>expect(dailyInterest(1000,36,30,'actual365')).toBeCloseTo(29.59,1));it('calculates an amortising payment',()=>expect(fixedPayment(1000,12,12)).toBeCloseTo(88.85,2));it('creates a closing amortisation schedule',()=>expect(amortisation(1000,12,12).at(-1)?.balance).toBeCloseTo(0,5));it('detects underpayment',()=>expect(payoffMonths(1000,24,10)).toBe(Infinity))});
+
