@@ -26,9 +26,11 @@ function FinancialMathLab() {
   const schedule = useMemo(() => amortisation(principal, apr, term), [principal, apr, term]);
   const payment = fixedPayment(principal, apr, term);
   const months = payoffMonths(principal, apr, payment);
+  const [bengali, setBengali] = useState(false);
   return <section className="panel math-lab">
     <div className="row"><div><span className="eyebrow">FINANCIAL MATHEMATICS</span><h2>Interest, payoff and amortisation lab</h2></div><span className="pill green">EDUCATIONAL MODEL</span></div>
-    <p className="muted">Transparent formulas for APR, EAR, daily day-count interest and fixed-payment schedules. These calculations do not connect to a lender or create payments.</p>
+    <div className="language-switch"><button className={bengali ? "" : "active"} onClick={()=>setBengali(false)}>English</button><button className={bengali ? "active" : ""} onClick={()=>setBengali(true)}>বাংলা</button></div>
+    <p className="muted">{bengali ? "APR, EAR, দৈনিক সুদ এবং কিস্তির হিসাব এখানে স্বচ্ছভাবে দেখানো হয়। এটি শুধু শিক্ষামূলক সিমুলেশন; কোনও ব্যাংক বা পেমেন্ট সিস্টেমের সঙ্গে সংযুক্ত নয়।" : "Transparent formulas for APR, EAR, daily day-count interest and fixed-payment schedules. These calculations do not connect to a lender or create payments."}</p>
     <div className="controls">
       <label>Principal (£)<input type="number" min="0" value={principal} onChange={e=>setPrincipal(+e.target.value)}/></label>
       <label>APR (%)<input type="number" min="0" step="0.01" value={apr} onChange={e=>setApr(+e.target.value)}/></label>
