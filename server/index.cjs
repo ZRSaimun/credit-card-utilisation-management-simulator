@@ -1,0 +1,6 @@
+const express=require('express');const Database=require('better-sqlite3');const path=require('path');
+const app=express();const db=new Database(path.join(__dirname,'simulator.sqlite'));db.exec(`CREATE TABLE IF NOT EXISTS scenarios(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL)`);app.use(express.json({limit:'2mb'}));
+app.get('/api/health',(_,res)=>res.json({ok:true,mode:'simulation-only'}));app.get('/api/scenarios',(_,res)=>res.json(db.prepare('SELECT id,name,payload,created_at FROM scenarios ORDER BY id DESC').all().map(x=>({...x,payload:JSON.parse(x.payload)}))));
+app.post('/api/scenarios',(req,res)=>{const name=String(req.body.name||'Untitled scenario');const payload=req.body.payload||{};const info=db.prepare('INSERT INTO scenarios(name,payload,created_at) VALUES(?,?,?)').run(name,JSON.stringify(payload),new Date().toISOString());res.status(201).json({id:info.lastInsertRowid,name,payload})});
+app.delete('/api/scenarios/:id',(req,res)=>{db.prepare('DELETE FROM scenarios WHERE id=?').run(req.params.id);res.status(204).end()});app.use(express.static(path.join(__dirname,'..','dist')));app.use((req,res)=>res.sendFile(path.join(__dirname,'..','dist','index.html')));app.listen(process.env.PORT||4173,()=>console.log('Simulation server listening'));
+
