@@ -8,6 +8,14 @@ Transfers move a balance between simulated cards. They do not remove debt. The r
 ## গণিত (বাংলা)
 ট্রান্সফার শুধু ঋণ এক কার্ড থেকে অন্য কার্ডে সরায়; ঋণ মুছে ফেলে না। হিসাব: **শুরুর ঋণ + নতুন খরচ + ফি − সিমুলেটেড পরিশোধ − বাইরের পেমেন্ট − অনুমোদিত অ্যাকাউন্টিং সমন্বয় = শেষের ঋণ**। ডিফল্ট ট্রান্সফার ফি ০%। £1,821 আলাদা বাইরের পেমেন্ট/অ্যাকাউন্টিং সমন্বয়; কার্ড ঘুরিয়ে তৈরি হওয়া টাকা নয়।
 
+## Included in v0.2
+
+- Editable simulated cards with validation and deletion
+- Chronological monthly ledger with statements, spending, fees, repayments, adjustment and roll-forward checkpoints
+- Feasibility engine and accounting reconciliation
+- CSV, Excel workbook, plain-text report and print-to-PDF export
+- 15 formula and accounting tests plus GitHub Actions CI
+
 ## Run
 `npm install && npm run dev`  · tests: `npm test` · production build: `npm run build`
 
