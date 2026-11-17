@@ -123,97 +123,122 @@ export function simulateCycle(
     fee: number;
   },
 ) {
+  // Card-level ledger: every month starts from the previous month's closing balances.
+  // Transfers and repayments are recorded as ledger events; only repayments/adjustments
+  // reduce total debt. With no external cash, cycling cannot reduce total debt.
   const events: Event[] = [];
-  let total = summary(cards).balance;
-  const add = (
+  const state = new Map(cards.map((c) => [c.name, { ...c }]));
+  const limit = summary(cards).limit;
+  let total = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+
+  const emit = (
     date: string,
     type: string,
     source: string,
     destination: string,
     amount: number,
     reason: string,
+    cardName: string | undefined,
     delta: number,
   ) => {
     const before = total;
+    const card = cardName ? state.get(cardName) : undefined;
+    const cardBefore = card?.balance;
+    if (card) card.balance = Math.max(0, card.balance + delta);
     total = Math.max(0, total + delta);
     events.push({
       date,
       type,
       source,
       destination,
-      amount,
+      amount: Math.max(0, amount),
       reason,
       before,
       after: total,
-      utilBefore: (before / summary(cards).limit) * 100,
-      utilAfter: (total / summary(cards).limit) * 100,
-    });
+      utilBefore: (before / limit) * 100,
+      utilAfter: (total / limit) * 100,
+      ...(card
+        ? {
+            cardBefore,
+            cardAfter: card.balance,
+            cardUtilBefore: ((cardBefore || 0) / card.limit) * 100,
+            cardUtilAfter: (card.balance / card.limit) * 100,
+          }
+        : {}),
+    } as Event);
   };
-  for (let m = 0; m < o.months; m++) {
-    const date = new Date(`${o.start}T00:00:00Z`);
-    date.setUTCMonth(date.getUTCMonth() + m);
-    const d = date.toISOString().slice(0, 10);
-    cards.forEach((card) => {
-      if (card.statement) {
-        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-        const statementDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.statement, lastDay))).toISOString().slice(0, 10);
-        add(statementDate, "Statement generation", card.name, "Ledger", 0, "Simulated card statement", 0);
-      }
-      if (card.dd && o.payment) {
-        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-        const ddDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.dd, lastDay))).toISOString().slice(0, 10);
-        const eligibleBalance = cards.filter((c) => c.dd).reduce((sum, c) => sum + c.balance, 0);
-        const share = (card.balance / Math.max(1, eligibleBalance)) * o.payment;
-        add(ddDate, "Direct Debit", "Simulated bank account", card.name, share, "Proportional simulated repayment", -share);
-      }
-    });
-    add(
-      d,
-      "Statement",
-      "Card issuers",
-      "Ledger",
-      0,
-      "Monthly statement generation",
-      0,
-    );
-    if (o.spend)
-      add(
-        d,
-        "New spending",
-        "User",
-        "Cards",
-        o.spend,
-        "Recurring simulated spending",
-        o.spend,
-      );
-    if (o.fee) {
-      const f = (o.spend * o.fee) / 100;
-      add(d, "Fee", "Transfer facility", "Cards", f, "Transfer fee", f);
+
+  for (let month = 0; month < o.months; month++) {
+    const base = new Date(`${o.start}T00:00:00Z`);
+    base.setUTCMonth(base.getUTCMonth() + month);
+    const year = base.getUTCFullYear();
+    const monthIndex = base.getUTCMonth();
+    const iso = (day: number) =>
+      new Date(Date.UTC(year, monthIndex, Math.min(day, new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate())))
+        .toISOString()
+        .slice(0, 10);
+
+    const scheduled: Array<{ date: string; kind: string; card?: Card; }> = [];
+    for (const card of state.values()) {
+      if (card.statement) scheduled.push({ date: iso(card.statement), kind: "statement", card });
+      if (card.dd) scheduled.push({ date: iso(card.dd), kind: "dd", card });
     }
-    if (o.payment && !cards.some((card) => card.dd))
-      add(
-        d,
-        "Simulated repayment",
-        "User",
-        "Cards",
-        o.payment,
-        "Simulated user payment",
-        -o.payment,
+    scheduled.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "statement" ? -1 : 1));
+
+    // Spend is allocated to the cards with the most 50% headroom first.
+    // This makes the 50% rule visible and flags any spend that cannot fit.
+    if (o.spend > 0) {
+      let remaining = o.spend;
+      const ordered = Array.from(state.values()).sort(
+        (a, b) => (b.limit * 0.5 - b.balance) - (a.limit * 0.5 - a.balance),
       );
-    if (m === 0 && o.external)
-      add(
-        d,
-        "Accounting adjustment",
-        "External payment / loss",
-        "Ledger",
-        o.external,
-        "One-time £1,821 item",
-        -o.external,
-      );
-    add(d, "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", 0);
+      for (const card of ordered) {
+        if (remaining <= 0) break;
+        const room = Math.max(0, card.limit * 0.5 - card.balance);
+        const amount = Math.min(remaining, room);
+        if (amount > 0) {
+          emit(iso(1), "New spending", "User", card.name, amount, "Balanced simulated spending", card.name, amount);
+          remaining -= amount;
+        }
+      }
+      if (remaining > 0) {
+        const room = ordered.reduce((sum, c) => sum + Math.max(0, c.limit - c.balance), 0);
+        const amount = Math.min(remaining, room);
+        if (amount > 0) {
+          emit(iso(1), "New spending", "User", "Cards", amount, "Spend beyond 50% headroom; flagged", undefined, amount);
+          remaining -= amount;
+        }
+      }
+      if (remaining > 0) {
+        emit(iso(1), "Rejected spending", "User", "Cards", remaining, "No available credit; rejected", undefined, 0);
+      }
+    }
+
+    for (const item of scheduled) {
+      if (item.kind === "statement") {
+        emit(item.date, "Statement generation", item.card!.name, "Ledger", 0, "Simulated card statement", undefined, 0);
+      } else if (o.payment > 0) {
+        const balanceTotal = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+        const card = item.card!;
+        const amount = Math.min(card.balance, balanceTotal > 0 ? o.payment * (card.balance / balanceTotal) : 0);
+        if (amount > 0) {
+          emit(item.date, "Direct Debit", "Simulated bank account", card.name, amount, "Proportional simulated repayment", card.name, -amount);
+        }
+      }
+    }
+
+    if (o.fee > 0 && o.spend > 0) {
+      const fee = (o.spend * o.fee) / 100;
+      emit(iso(1), "Fee", "Transfer facility", "Cards", fee, "Transfer fee", undefined, fee);
+    }
+    if (month === 0 && o.external > 0) {
+      emit(iso(1), "Accounting adjustment", "External payment / loss", "Ledger", o.external, "One-time accounting adjustment", undefined, -o.external);
+    }
+    emit(iso(new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()), "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", undefined, 0);
   }
   return events.sort((a, b) => a.date.localeCompare(b.date));
 }
+
 export function exportCSV(cards: Card[]) {
   const rows = [
     "Card,Provider,Limit,Balance,Statement day,Direct Debit day,APR,Utilisation",
