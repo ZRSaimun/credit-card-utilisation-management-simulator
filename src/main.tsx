@@ -51,6 +51,10 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [transferSource, setTransferSource] = useState("");
+  const [transferDestination, setTransferDestination] = useState("");
+  const [transferAmount, setTransferAmount] = useState(0);
+  const [transferFee, setTransferFee] = useState(0);
   const [tab, setTab] = useState("Dashboard");
   const [edit, setEdit] = useState<Card | null>(null);
   const [external, setExternal] = useState(false);
@@ -65,6 +69,7 @@ function App() {
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
+  const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
   const opts = { external: external ? 1821 : 0, spend: cardSpendTotal || spend, payment, fee, months };
   const status = useMemo(
@@ -375,6 +380,7 @@ function App() {
             Reallocation cannot reduce total debt without repayment or external
             money.
           </p>
+          <div className="transfer-builder"><div className="row"><div><h3>Transfer builder</h3><p className="muted">Preview a simulated card-to-card transfer. No real transfer is created.</p></div><span className="pill green">LEDGER PREVIEW</span></div><div className="controls"><label>Source card<select value={transferSource} onChange={e=>setTransferSource(e.target.value)}><option value="">Choose source</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Destination card<select value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">Choose destination</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Transfer amount<input type="number" min="0" value={transferAmount} onChange={e=>setTransferAmount(+e.target.value)}/></label><label>Fee %<input type="number" min="0" value={transferFee} onChange={e=>setTransferFee(+e.target.value)}/></label></div>{transferPreview.source&&transferPreview.destination&&transferPreview.source!==transferPreview.destination&&<div className="transfer-preview"><p><b>{formatGBP(transferPreview.amount)}</b> moves from {transferPreview.source.name} to {transferPreview.destination.name}.</p><p>Source after: <b>{formatGBP(transferPreview.source.balance-transferPreview.amount)}</b> · Destination after: <b>{formatGBP(transferPreview.destination.balance+transferPreview.amount)}</b></p><p className="warning">Total debt change: <b>+{formatGBP(transferPreview.totalDebtChange)}</b> from fees. The transfer itself creates no debt reduction.</p></div>}</div>
           <table>
             <thead>
               <tr>
