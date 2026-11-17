@@ -21,5 +21,5 @@ Transfers move a balance between simulated cards. They do not remove debt. The r
 
 For the persistent local scenario API, build first and run `npm run serve`. It uses a local SQLite file (`server/simulator.sqlite`) and exposes only simulation scenario storage; it has no bank or payment integrations.
 
-Missing dates are intentionally blank: Barclays Rewards statement/DD dates, Santander A statement date, Santander B statement date. APR fields can be added later if interest is enabled.
+Barclays Rewards is configured with statement day 5 and Direct Debit day 30. Missing dates remain intentionally blank only for Santander A and Santander B statement dates. APR fields can be added later if interest is enabled.
 
