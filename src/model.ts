@@ -184,6 +184,7 @@ export function simulateCycle(
       if (card.dd) scheduled.push({ date: iso(card.dd), kind: "dd", card });
     }
     scheduled.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "statement" ? -1 : 1));
+    let paymentRemaining = Math.max(0, o.payment);
 
     // Spend is allocated to the cards with the most 50% headroom first.
     // This makes the 50% rule visible and flags any spend that cannot fit.
@@ -220,9 +221,10 @@ export function simulateCycle(
       } else if (o.payment > 0) {
         const balanceTotal = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
         const card = item.card!;
-        const amount = Math.min(card.balance, balanceTotal > 0 ? o.payment * (card.balance / balanceTotal) : 0);
+        const amount = Math.min(card.balance, paymentRemaining, balanceTotal > 0 ? paymentRemaining * (card.balance / balanceTotal) : 0);
         if (amount > 0) {
           emit(item.date, "Direct Debit", "Simulated bank account", card.name, amount, "Proportional simulated repayment", card.name, -amount);
+          paymentRemaining -= amount;
         }
       }
     }
