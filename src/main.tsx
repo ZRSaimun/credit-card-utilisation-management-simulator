@@ -59,6 +59,7 @@ function App() {
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
+  const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
   const opts = { external: external ? 1821 : 0, spend, payment, fee, months };
   const status = useMemo(
     () => feasibility(cards, opts),
@@ -545,6 +546,7 @@ function App() {
       {tab === "Scenarios" && (
         <section className="panel">
           <h2>Scenario comparison</h2>
+          <ResponsiveContainer width="100%" height={280}><BarChart data={scenarioData} margin={{top:8,right:12,left:0,bottom:45}}><CartesianGrid strokeDasharray="3 3" stroke="#e6edef" vertical={false}/><XAxis dataKey="name" angle={-25} textAnchor="end" interval={0} height={60} tick={{fontSize:11}}/><YAxis tickFormatter={(v)=>`£${Math.round(v/1000)}k`} tick={{fontSize:11}}/><Tooltip formatter={(value)=>[formatGBP(Number(value)),"Balance"]}/><Bar dataKey="balance" fill="#183e49" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer>
           <table>
             <thead>
               <tr>
