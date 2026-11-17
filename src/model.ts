@@ -153,6 +153,20 @@ export function simulateCycle(
     const date = new Date(`${o.start}T00:00:00Z`);
     date.setUTCMonth(date.getUTCMonth() + m);
     const d = date.toISOString().slice(0, 10);
+    cards.forEach((card) => {
+      if (card.statement) {
+        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+        const statementDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.statement, lastDay))).toISOString().slice(0, 10);
+        add(statementDate, "Statement generation", card.name, "Ledger", 0, "Simulated card statement", 0);
+      }
+      if (card.dd && o.payment) {
+        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+        const ddDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.dd, lastDay))).toISOString().slice(0, 10);
+        const eligibleBalance = cards.filter((c) => c.dd).reduce((sum, c) => sum + c.balance, 0);
+        const share = (card.balance / Math.max(1, eligibleBalance)) * o.payment;
+        add(ddDate, "Direct Debit", "Simulated bank account", card.name, share, "Proportional simulated repayment", -share);
+      }
+    });
     add(
       d,
       "Statement",
@@ -176,7 +190,7 @@ export function simulateCycle(
       const f = (o.spend * o.fee) / 100;
       add(d, "Fee", "Transfer facility", "Cards", f, "Transfer fee", f);
     }
-    if (o.payment)
+    if (o.payment && !cards.some((card) => card.dd))
       add(
         d,
         "Simulated repayment",
@@ -198,7 +212,7 @@ export function simulateCycle(
       );
     add(d, "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", 0);
   }
-  return events;
+  return events.sort((a, b) => a.date.localeCompare(b.date));
 }
 export function exportCSV(cards: Card[]) {
   const rows = [
