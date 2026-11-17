@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import "./styles.css";
 import {
   Card,
@@ -55,6 +56,7 @@ function App() {
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
+  const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const opts = { external: external ? 1821 : 0, spend, payment, fee, months };
   const status = useMemo(
     () => feasibility(cards, opts),
@@ -244,6 +246,10 @@ function App() {
               </ul>
             </div>
           </section>
+          <section className="panel chart-panel">
+            <div className="row"><div><h2>Card utilisation map</h2><p className="muted">Each bar is compared with the 50% target.</p></div><span className="pill green">LIVE MODEL</span></div>
+            <ResponsiveContainer width="100%" height={300}><BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" stroke="#e6edef" vertical={false}/><XAxis dataKey="name" angle={-35} textAnchor="end" interval={0} height={65} tick={{fontSize:11}}/><YAxis unit="%" tick={{fontSize:11}}/><Tooltip formatter={(value)=>[`${value}%`, "Utilisation"]}/><Bar dataKey="utilisation" fill="#20a879" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer>
+          </section>
           <section className="panel">
             <h2>Validation</h2>
             <p>
@@ -252,8 +258,8 @@ function App() {
               utilisation, <b>{formatGBP(s.diff)}</b> to reach 50% overall.
             </p>
             <p className="warning">
-              Missing: Barclays Rewards statement/DD dates; Santander A
-              statement date; Santander B statement date. APRs remain optional.
+              Missing: Santander A statement date and Santander B statement date.
+              Barclays Rewards is configured for statement day 5 and Direct Debit day 30. APRs remain optional.
             </p>
           </section>
         </>
