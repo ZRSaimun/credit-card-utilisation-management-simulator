@@ -53,6 +53,7 @@ function App() {
   const [edit, setEdit] = useState<Card | null>(null);
   const [external, setExternal] = useState(false);
   const [spend, setSpend] = useState(0);
+  const [spendByCard, setSpendByCard] = useState<Record<string, number>>({});
   const [payment, setPayment] = useState(0);
   const [fee, setFee] = useState(0);
   const [months, setMonths] = useState(1);
@@ -62,7 +63,8 @@ function App() {
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
-  const opts = { external: external ? 1821 : 0, spend, payment, fee, months };
+  const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
+  const opts = { external: external ? 1821 : 0, spend: cardSpendTotal || spend, payment, fee, months };
   const status = useMemo(
     () => feasibility(cards, opts),
     [cards, external, spend, payment, fee, months],
@@ -72,7 +74,7 @@ function App() {
       simulateCycle(cards, {
         start,
         months,
-        spend,
+        spend: cardSpendTotal || spend,
         payment,
         external: external ? 1821 : 0,
         fee,
@@ -449,6 +451,11 @@ function App() {
                 onChange={(e) => setFee(+e.target.value)}
               />
             </label>
+          </div>
+          <div className="card-spend-grid">
+            <h3>New spending by card / month</h3>
+            <div className="controls">{cards.map(c=><label key={c.name}>{c.name}<input type="number" min="0" value={spendByCard[c.name] ?? 0} onChange={e=>setSpendByCard({...spendByCard,[c.name]:Math.max(0,+e.target.value)})}/></label>)}</div>
+            <p className="muted">Total card-level spending: <b>{formatGBP(cardSpendTotal)}</b>. If all values are zero, the general spending input above is used.</p>
           </div>
           <label className="check">
             <input
