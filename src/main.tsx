@@ -60,6 +60,7 @@ function App() {
   const a = useMemo(() => allocation(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
+  const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
   const opts = { external: external ? 1821 : 0, spend, payment, fee, months };
   const status = useMemo(
     () => feasibility(cards, opts),
@@ -518,6 +519,8 @@ function App() {
               ))}
             </tbody>
           </table>
+          <h3>Chronological monthly date map</h3>
+          <table><thead><tr><th>Day</th><th>Event</th><th>Card</th><th>Funding note</th></tr></thead><tbody>{cardDateEvents.map(e=><tr><td>{e.date}</td><td>{e.type}</td><td>{e.card}</td><td className={e.type === "Direct Debit" && e.day === 1 ? "warning" : ""}>{e.type === "Direct Debit" && e.day === 1 ? "Needs funding before the 1st" : e.type === "Direct Debit" ? "Funding required before this date" : "Statement generated"}</td></tr>)}</tbody></table>
           <h3>Simulated event calendar</h3>
           <table>
             <thead>
