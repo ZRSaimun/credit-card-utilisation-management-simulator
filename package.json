@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {"dev":"vite", "build":"tsc -b && vite build", "test":"vitest run"},
-  "dependencies": {"@vitejs/plugin-react":"latest", "vite":"latest", "typescript":"latest", "react":"latest", "react-dom":"latest", "recharts":"latest"},
-  "devDependencies": {"vitest":"latest", "jsdom":"latest", "@types/react":"latest", "@types/react-dom":"latest"}
+  "dependencies": {"@vitejs/plugin-react":"latest", "vite":"latest", "typescript":"latest", "react":"latest", "react-dom":"latest", "recharts":"latest", "xlsx":"latest"},
+  "devDependencies": {"vitest":"latest", "jsdom":"latest", "@types/react":"latest", "@types/react-dom":"latest", "@types/node":"latest"}
 }
 
