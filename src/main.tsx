@@ -48,6 +48,7 @@ function FinancialMathLab() {
 }
 function App() {
   const [cards, setCards] = useState<Card[]>(initialCards);
+  const [darkMode, setDarkMode] = useState(false);
   const [tab, setTab] = useState("Dashboard");
   const [edit, setEdit] = useState<Card | null>(null);
   const [external, setExternal] = useState(false);
@@ -170,7 +171,7 @@ function App() {
     XLSX.writeFile(wb, "credit-card-simulator.xlsx");
   };
   return (
-    <div className="app">
+    <div className={darkMode ? "app dark-mode" : "app"}>
       <header>
         <div>
           <span className="eyebrow">JOB ASSIGNMENT TOOL</span>
@@ -179,7 +180,7 @@ function App() {
             Educational model · every event is simulated
           </p>
         </div>
-        <span className="badge">SIMULATION ONLY</span>
+        <div className="header-actions"><button className="theme-toggle" onClick={()=>setDarkMode(v=>!v)} aria-label="Toggle colour theme">{darkMode ? "☀ Light" : "◐ Dark"}</button><span className="badge">SIMULATION ONLY</span></div>
       </header>
       <nav>
         {[
