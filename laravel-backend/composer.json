@@ -1,0 +1,7 @@
+{
+  "name": "zrsaimun/credit-card-simulator-api",
+  "type": "project",
+  "require": {"php": "^8.2", "laravel/framework": "^12.0"},
+  "scripts": {"post-install-cmd": ["@php artisan migrate --force"]}
+}
+
