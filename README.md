@@ -23,3 +23,7 @@ For the persistent local scenario API, build first and run `npm run serve`. It u
 
 Barclays Rewards is configured with statement day 5 and Direct Debit day 30. Missing dates remain intentionally blank only for Santander A and Santander B statement dates. APR fields can be added later if interest is enabled.
 
+## Financial Mathematics Lab
+
+The app includes an educational lab for APR-to-EAR conversion, Actual/365 daily interest, fixed-payment annuities, payoff duration, and amortisation schedules. Advanced risk methods such as stochastic calculus, PDEs, copulas, and Monte Carlo are documented as optional portfolio-risk concepts rather than being misrepresented as ordinary card-ledger calculations.
+
