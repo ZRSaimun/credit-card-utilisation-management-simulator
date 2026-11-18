@@ -22,7 +22,7 @@ export type Event = {
   utilAfter: number;
 };
 export const initialCards: Card[] = [
-  ["Capital One A", "Capital One", 2250, 0, 28, 20],
+  ["Capital One A", "Capital One", 2250, 1100, 28, 20],
   ["Capital One B", "Capital One", 1000, 645, 22, 15],
   ["Barclays Rewards", "Barclays", 300, 35, 5, 30],
   ["Santander A", "Santander", 3300, 2006, undefined, 1],
@@ -74,6 +74,40 @@ export function allocation(cards: Card[]) {
       util: ((c.balance - reduce) / c.limit) * 100,
     };
   });
+}
+export function planTransfersToFiftyPercent(cards: Card[]) {
+  const targets = cards.map(card => ({
+    name: card.name,
+    balance: card.balance,
+    target: card.limit * 0.5,
+    excess: Math.max(0, card.balance - card.limit * 0.5),
+    room: Math.max(0, card.limit * 0.5 - card.balance),
+  }));
+  const donors = targets.filter(card => card.excess > 0).map(card => ({ ...card }));
+  const receivers = targets.filter(card => card.room > 0).map(card => ({ ...card }));
+  const transfers: Array<{ source: string; destination: string; amount: number }> = [];
+  let i = 0, j = 0;
+  while (i < donors.length && j < receivers.length) {
+    const amount = Math.min(donors[i].excess, receivers[j].room);
+    if (amount > 0) {
+      transfers.push({ source: donors[i].name, destination: receivers[j].name, amount });
+      donors[i].excess -= amount;
+      receivers[j].room -= amount;
+    }
+    if (donors[i].excess <= 0.005) i++;
+    if (receivers[j].room <= 0.005) j++;
+  }
+  const repayments = donors.filter(card => card.excess > 0.005).map(card => ({ card: card.name, amount: card.excess }));
+  const transferTotal = transfers.reduce((sum, transfer) => sum + transfer.amount, 0);
+  const repaymentTotal = repayments.reduce((sum, repayment) => sum + repayment.amount, 0);
+  return {
+    transfers,
+    repayments,
+    transferTotal,
+    repaymentTotal,
+    totalExcess: targets.reduce((sum, card) => sum + card.excess, 0),
+    availableRoom: targets.reduce((sum, card) => sum + card.room, 0),
+  };
 }
 export function totalFees(spend: number, fee: number, months: number) {
   return (spend * months * fee) / 100;
