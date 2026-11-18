@@ -116,7 +116,7 @@ function App() {
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
-  const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "Pay down to 50%", balance: s.target }], [s,a]);
+  const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((sum,item)=>sum+item.result,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "After 50% gap payment", balance: s.target }], [s,a]);
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
   const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
@@ -808,10 +808,10 @@ function App() {
                   "Requires repayment",
                 ],
                 [
-                  "Every card ≤50%",
-                  a.reduce((x, y) => x + y.reduce, 0),
-                  a.reduce((x, y) => x + y.reduce, 0),
-                  "Card-level constraint",
+                  "Every card ≤50% without transfers",
+                  a.reduce((sum, item) => sum + item.result, 0),
+                  a.reduce((sum, item) => sum + item.reduce, 0),
+                  "Repay each over-target card",
                 ],
                 ["30% overall", s.limit * 0.3, "Variable", "Lower debt"],
                 ["25% overall", s.limit * 0.25, "Variable", "Lower debt"],
@@ -820,12 +820,6 @@ function App() {
                   s.balance,
                   0,
                   "Transfers conserve debt",
-                ],
-                [
-                  "One-time payment to 50% overall",
-                  s.target,
-                  s.diff,
-                  "Separate adjustment",
                 ],
               ].map((r) => (
                 <tr>
@@ -891,7 +885,7 @@ function App() {
             {scenarioMessage && <p className="scenario-message" role="status">{scenarioMessage}</p>}
             {savedScenarios.length ? <div className="saved-scenario-list">{savedScenarios.map(snapshot=><article className="saved-scenario" key={snapshot.id}><div><b>{snapshot.name}</b><small>Saved {new Date(snapshot.savedAt).toLocaleString()} · {snapshot.cards.length} cards · {snapshot.settings.months} month(s)</small></div><div className="saved-scenario-actions"><button onClick={()=>loadScenario(snapshot)}>Load</button><button onClick={()=>renameScenario(snapshot)}>Rename</button><button onClick={()=>deleteScenario(snapshot)}>Delete</button></div></article>)}</div> : <p className="muted">No saved scenarios yet. Enter a name and save the current setup.</p>}
           </section>
-          <pre>{buildReport(cards, status, events)}</pre>
+          <pre>{buildReport(cards, status, events, external ? s.diff : 0)}</pre>
         </section>
       )}
       {selectedCard && <div className="drawer-backdrop" onClick={()=>setSelectedCard(null)}><aside className="detail-drawer" onClick={e=>e.stopPropagation()}><button className="drawer-close" onClick={()=>setSelectedCard(null)} aria-label="Close card details">×</button><span className="eyebrow">CARD DETAIL</span><h2>{selectedCard.name}</h2><p className="muted">{selectedCard.provider}</p><div className="drawer-grid"><div><span>Balance</span><b>{formatGBP(selectedCard.balance)}</b></div><div><span>Credit limit</span><b>{formatGBP(selectedCard.limit)}</b></div><div><span>Utilisation</span><b>{(selectedCard.balance/selectedCard.limit*100).toFixed(1)}%</b></div><div><span>Available</span><b>{formatGBP(selectedCard.limit-selectedCard.balance)}</b></div><div><span>Statement</span><b>{selectedCard.statement ?? "Missing"}</b></div><div><span>Direct Debit</span><b>{selectedCard.dd ?? "Missing"}</b></div></div><div className="callout">50% target balance: <b>{formatGBP(selectedCard.limit*.5)}</b><br/>Amount above target: <b>{formatGBP(Math.max(0,selectedCard.balance-selectedCard.limit*.5))}</b></div></aside></div>}
