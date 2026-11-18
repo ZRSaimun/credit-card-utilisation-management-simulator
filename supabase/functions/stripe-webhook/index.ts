@@ -11,7 +11,13 @@ Deno.serve(async (req) => {
     const customer = typeof object.customer === "string" ? object.customer : object.customer?.id;
     const active = ["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated"].includes(event.type);
     const inactive = ["customer.subscription.deleted"].includes(event.type);
-    if ((active || inactive) && customer) { const supabase = adminClient(); await supabase.from("profiles").update({ is_pro: active, stripe_customer_id: customer }).eq("stripe_customer_id", customer); }
+    if (active || inactive) {
+      const supabase = adminClient();
+      const profileId = event.type === "checkout.session.completed" ? (object as Stripe.Checkout.Session).metadata?.profile_id : undefined;
+      const update = { is_pro: active, ...(customer ? { stripe_customer_id: customer } : {}) };
+      const query = profileId ? supabase.from("profiles").update(update).eq("id", profileId) : customer ? supabase.from("profiles").update(update).eq("stripe_customer_id", customer) : null;
+      if (query) { const { error } = await query; if (error) throw error; }
+    }
     return new Response(JSON.stringify({ received: true }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) { return new Response(JSON.stringify({ error: String((error as Error).message || error) }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } }); }
 });
