@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -18,6 +18,7 @@ import {
   downloadBlob,
 } from "./model";
 import { amortisation, dailyInterest, effectiveAnnualRate, fixedPayment, payoffMonths } from "./financialMath";
+import { CloudScenarioRow, CloudSession, deleteCloudScenario, listCloudScenarios, readCloudSession, saveCloudScenario, signInCloudUser, signOutCloudUser, signUpCloudUser } from "./supabase";
 type ScenarioSettings = {
   external: boolean;
   spend: number;
@@ -116,8 +117,40 @@ function App() {
   const [scenarioName, setScenarioName] = useState("Assignment scenario");
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(readSavedScenarios);
   const [scenarioMessage, setScenarioMessage] = useState("");
+  const [cloudSession, setCloudSession] = useState<CloudSession | null>(readCloudSession);
+  const [cloudEmail, setCloudEmail] = useState("");
+  const [cloudPassword, setCloudPassword] = useState("");
+  const [cloudRows, setCloudRows] = useState<CloudScenarioRow[]>([]);
+  const [cloudMessage, setCloudMessage] = useState("");
+  const [cloudBusy, setCloudBusy] = useState(false);
+
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  const reloadCloudScenarios = async (session: CloudSession) => {
+    const result = await listCloudScenarios(session);
+    setCloudSession(result.session);
+    setCloudRows(result.rows);
+    return result.rows;
+  };
+  useEffect(() => {
+    const stored = readCloudSession();
+    if (!stored) return;
+    let cancelled = false;
+    void listCloudScenarios(stored).then(result => {
+      if (!cancelled) {
+        setCloudSession(result.session);
+        setCloudRows(result.rows);
+        setCloudMessage("Secure cloud storage connected.");
+      }
+    }).catch(error => {
+      if (!cancelled) {
+        setCloudSession(null);
+        setCloudRows([]);
+        setCloudMessage("Could not restore cloud session: " + String(error.message || error));
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
@@ -254,6 +287,103 @@ function App() {
       setScenarioMessage("Could not read that backup file. Choose a valid simulator JSON backup.");
     }
   };
+  const currentScenarioSettings = (): ScenarioSettings => ({
+    external, spend, spendByCard: { ...spendByCard }, payment, cashBudget, startingCash, paydayDay, fee, months, start, selectedCycleMonth,
+  });
+  const handleCloudSignUp = async () => {
+    if (!cloudEmail.trim() || cloudPassword.length < 8) {
+      setCloudMessage("Enter your email and a password with at least 8 characters.");
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const session = await signUpCloudUser(cloudEmail.trim(), cloudPassword, window.location.origin + window.location.pathname);
+      setCloudPassword("");
+      if (session) {
+        setCloudSession(session);
+        await reloadCloudScenarios(session);
+        setCloudMessage("Account created and signed in.");
+      } else {
+        setCloudMessage("Check your email to confirm the account, then sign in here.");
+      }
+    } catch (error) {
+      setCloudMessage("Sign-up failed: " + String((error as Error).message || error));
+    } finally { setCloudBusy(false); }
+  };
+  const handleCloudSignIn = async () => {
+    setCloudBusy(true);
+    try {
+      const session = await signInCloudUser(cloudEmail.trim(), cloudPassword);
+      setCloudSession(session);
+      setCloudPassword("");
+      await reloadCloudScenarios(session);
+      setCloudMessage("Signed in. Your private cloud scenarios are loaded.");
+    } catch (error) {
+      setCloudMessage("Sign-in failed: " + String((error as Error).message || error));
+    } finally { setCloudBusy(false); }
+  };
+  const handleCloudSignOut = async () => {
+    if (!cloudSession) return;
+    setCloudBusy(true);
+    try { await signOutCloudUser(cloudSession); }
+    catch { /* Local session is cleared even if the network sign-out fails. */ }
+    setCloudSession(null);
+    setCloudRows([]);
+    setCloudMessage("Signed out. Cloud scenario data remains in your account.");
+    setCloudBusy(false);
+  };
+  const saveCurrentToCloud = async () => {
+    if (!cloudSession) return;
+    const name = scenarioName.trim() || "Cloud scenario";
+    const snapshot: SavedScenario = {
+      id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+      name,
+      savedAt: new Date().toISOString(),
+      cards: cards.map(card => ({ ...card })),
+      settings: currentScenarioSettings(),
+    };
+    setCloudBusy(true);
+    try {
+      const next = await saveCloudScenario(cloudSession, {
+        scenario_id: snapshot.id,
+        name: snapshot.name,
+        saved_at: snapshot.savedAt,
+        payload: { cards: snapshot.cards, settings: snapshot.settings },
+      });
+      setCloudSession(next);
+      await reloadCloudScenarios(next);
+      setCloudMessage("Saved “" + name + "” to your private Supabase account.");
+    } catch (error) {
+      setCloudMessage("Could not save to cloud: " + String((error as Error).message || error));
+    } finally { setCloudBusy(false); }
+  };
+  const loadCloudScenario = (row: CloudScenarioRow) => {
+    const snapshot = {
+      id: row.scenario_id,
+      name: row.name,
+      savedAt: row.saved_at,
+      cards: row.payload.cards as Card[],
+      settings: row.payload.settings as ScenarioSettings,
+    };
+    if (!isSavedScenario(snapshot)) {
+      setCloudMessage("This cloud record is incomplete and cannot be loaded.");
+      return;
+    }
+    loadScenario(snapshot);
+    setCloudMessage("Loaded “" + snapshot.name + "” from your cloud account.");
+  };
+  const removeCloudScenario = async (row: CloudScenarioRow) => {
+    if (!cloudSession || !window.confirm("Delete cloud scenario “" + row.name + "”?")) return;
+    setCloudBusy(true);
+    try {
+      const next = await deleteCloudScenario(cloudSession, row.scenario_id);
+      setCloudSession(next);
+      await reloadCloudScenarios(next);
+      setCloudMessage("Deleted “" + row.name + "” from your cloud account.");
+    } catch (error) {
+      setCloudMessage("Could not delete cloud scenario: " + String((error as Error).message || error));
+    } finally { setCloudBusy(false); }
+  };
   const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
@@ -380,6 +510,7 @@ function App() {
           "Scenarios",
           "Financial Math Lab",
           "Reports",
+          "Cloud Sync",
         ].map((x) => (
           <button
             className={tab === x ? "active" : ""}
@@ -896,6 +1027,23 @@ function App() {
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+      {tab === "Cloud Sync" && (
+        <section className="panel cloud-sync">
+          <div className="row"><div><span className="eyebrow">SUPABASE CLOUD STORAGE</span><h2>Private scenario backup</h2></div><span className={cloudSession ? "pill green" : "pill"}>{cloudSession ? "CONNECTED" : "SIGN IN REQUIRED"}</span></div>
+          <p className="muted">Sign in to save assignment scenarios to your Supabase account and open them on another device. Each account can access only its own scenarios. Do not enter real card numbers or security codes.</p>
+          {cloudSession ? <>
+            <div className="cloud-account"><span>Signed in as</span><b>{cloudSession.user.email || cloudSession.user.id}</b><button onClick={handleCloudSignOut} disabled={cloudBusy}>Sign out</button></div>
+            <div className="cloud-save-row"><button onClick={saveCurrentToCloud} disabled={cloudBusy}>Save current scenario to cloud</button><button onClick={()=>void reloadCloudScenarios(cloudSession).then(()=>setCloudMessage("Cloud scenarios refreshed.")).catch(error=>setCloudMessage("Refresh failed: "+String(error.message||error)))} disabled={cloudBusy}>Refresh list</button></div>
+            {cloudRows.length ? <div className="saved-scenario-list">{cloudRows.map(row=><article className="saved-scenario" key={row.scenario_id}><div><b>{row.name}</b><small>Saved {new Date(row.saved_at).toLocaleString()} · {(row.payload.cards || []).length} cards</small></div><div className="saved-scenario-actions"><button onClick={()=>loadCloudScenario(row)}>Load</button><button onClick={()=>void removeCloudScenario(row)} disabled={cloudBusy}>Delete</button></div></article>)}</div> : <p className="muted">No cloud scenarios yet. Save the current setup to get started.</p>}
+          </> : <>
+            <div className="controls cloud-auth"><label>Email<input type="email" autoComplete="email" value={cloudEmail} onChange={e=>setCloudEmail(e.target.value)} placeholder="you@example.com"/></label><label>Password<input type="password" autoComplete="current-password" value={cloudPassword} onChange={e=>setCloudPassword(e.target.value)} placeholder="At least 8 characters"/></label></div>
+            <div className="actions"><button onClick={()=>void handleCloudSignIn()} disabled={cloudBusy}>Sign in</button><button onClick={()=>void handleCloudSignUp()} disabled={cloudBusy}>Create account</button></div>
+            <p className="muted">Supabase may email a confirmation link before the first sign-in. Use the same email account you registered with in Supabase Auth.</p>
+          </>}
+          {cloudMessage && <p className="scenario-message" role="status">{cloudMessage}</p>}
+          <p className="cloud-privacy-note">Cloud access uses a public publishable key protected by database row-level security. Passwords are handled by Supabase Auth and are not saved by this simulator.</p>
         </section>
       )}
       {tab === "Financial Math Lab" && (
