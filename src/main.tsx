@@ -98,7 +98,7 @@ function App() {
     });
   }, [events, start, selectedCycleMonth]);
   const selectedMonthSummary = useMemo(() => cards.map(card => {
-    const cardEvents = selectedMonthEvents.filter((event: any) => event.destination === card.name || event.source === card.name);
+    const cardEvents: any[] = selectedMonthEvents.filter((event: any) => event.destination === card.name || event.source === card.name);
     const spending = cardEvents.filter((event: any) => event.type === "New spending" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
     const repayments = cardEvents.filter((event: any) => event.type === "Direct Debit" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
     const last = [...cardEvents].reverse().find((event: any) => event.destination === card.name && typeof event.cardAfter === "number");
