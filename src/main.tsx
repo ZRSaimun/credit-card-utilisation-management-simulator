@@ -518,6 +518,16 @@ function App() {
             <p>{status.detail}</p>
             <p>Closing debt: {formatGBP(status.closing)}</p>
           </div>
+          <section className="event-timeline-panel">
+            <div className="row"><div><h3>Cycle timeline</h3><p className="muted">Events are ordered by simulated date.</p></div><span className="pill green">{events.length} EVENTS</span></div>
+            <div className="event-timeline">
+              {events.slice(0, 16).map((event, index) => <div className="timeline-item" key={event.date + event.type + event.destination + index}>
+                <div className="timeline-marker"></div>
+                <div className="timeline-content"><div className="timeline-top"><b>{event.type}</b><time>{event.date}</time></div><p>{event.source} → {event.destination}</p><small>{event.reason} · {formatGBP(event.amount)}</small></div>
+              </div>)}
+            </div>
+            {events.length > 16 && <p className="muted timeline-more">Showing first 16 events. Full details remain in the ledger below.</p>}
+          </section>
           <h3>Chronological ledger</h3>
           <table>
             <thead>
