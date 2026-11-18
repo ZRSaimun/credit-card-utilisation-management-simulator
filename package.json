@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'e2e/**'",
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
     "serve": "node server/index.cjs"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "xlsx": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/express": "^5.0.6",
     "@types/node": "latest",
     "@types/react": "latest",
