@@ -63,6 +63,7 @@ function App() {
   const [payment, setPayment] = useState(0);
   const [fee, setFee] = useState(0);
   const [months, setMonths] = useState(1);
+  const [selectedCycleMonth, setSelectedCycleMonth] = useState(1);
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
@@ -88,7 +89,7 @@ function App() {
       }),
     [cards, start, months, spend, payment, external, fee],
   );
-  const save = (c: Card) => {
+  const selectedMonthEvents = useMemo(() => {\n    const base = new Date(start + "T00:00:00Z");\n    return events.filter((event: any) => {\n      const d = new Date(event.date + "T00:00:00Z");\n      const offset = (d.getUTCFullYear() - base.getUTCFullYear()) * 12 + d.getUTCMonth() - base.getUTCMonth();\n      return offset === selectedCycleMonth - 1;\n    });\n  }, [events, start, selectedCycleMonth]);\n  const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
       setCards((cs) => cs.map((x) => (x === edit ? c : x)));
@@ -500,7 +501,7 @@ function App() {
               />
             </label>
           </div>
-          <div className="card-spend-grid">
+          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div></div>\n          <div className="card-spend-grid">
             <h3>New spending by card / month</h3>
             <div className="controls">{cards.map(c=><label key={c.name}>{c.name}<input type="number" min="0" value={spendByCard[c.name] ?? 0} onChange={e=>setSpendByCard({...spendByCard,[c.name]:Math.max(0,+e.target.value)})}/></label>)}</div>
             <p className="muted">Total card-level spending: <b>{formatGBP(cardSpendTotal)}</b>. If all values are zero, the general spending input above is used.</p>
@@ -521,12 +522,12 @@ function App() {
           <section className="event-timeline-panel">
             <div className="row"><div><h3>Cycle timeline</h3><p className="muted">Events are ordered by simulated date.</p></div><span className="pill green">{events.length} EVENTS</span></div>
             <div className="event-timeline">
-              {events.slice(0, 16).map((event, index) => <div className="timeline-item" key={event.date + event.type + event.destination + index}>
+              {selectedMonthEvents.slice(0, 16).map((event, index) => <div className="timeline-item" key={event.date + event.type + event.destination + index}>
                 <div className="timeline-marker"></div>
                 <div className="timeline-content"><div className="timeline-top"><b>{event.type}</b><time>{event.date}</time></div><p>{event.source} → {event.destination}</p><small>{event.reason} · {formatGBP(event.amount)}</small></div>
               </div>)}
             </div>
-            {events.length > 16 && <p className="muted timeline-more">Showing first 16 events. Full details remain in the ledger below.</p>}
+            {selectedMonthEvents.length > 16 && <p className="muted timeline-more">Showing first 16 events for this month. Full details remain in the ledger below.</p>}
           </section>
           <h3>Chronological ledger</h3>
           <table>
