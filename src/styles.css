@@ -60,3 +60,22 @@ nav{position:sticky;top:10px;z-index:10;background:#f3f6f8cc;backdrop-filter:blu
 .dark-mode .conservation-note{background:#12342c;color:#c9f2df;border-left-color:#55d5a6}
 @media(max-width:980px){.conservation-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.conservation-equation{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:560px){.conservation-stats,.conservation-transfer,.conservation-equation{grid-template-columns:1fr}.conservation-stats b,.conservation-transfer b,.conservation-equation b{font-size:1rem}.equation-formula{font-size:.65rem}}
+
+.cloud-sync{max-width:980px;margin:18px auto;border-color:#c9e8da;background:linear-gradient(135deg,#fff 0%,#f4fbf7 100%)}
+.cloud-sync>.row h2{margin:5px 0 0}
+.cloud-sync>p{line-height:1.6}
+.cloud-sync .controls{grid-template-columns:repeat(2,minmax(0,1fr));margin:18px 0}
+.cloud-sync .cloud-account{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px;border:1px solid #cce9da;border-radius:12px;background:#effaf4}
+.cloud-account span{color:#637283;font-size:.72rem;font-weight:700;text-transform:uppercase}
+.cloud-account b{flex:1;overflow-wrap:anywhere}
+.cloud-account button,.cloud-save-row button{border:1px solid #152f40;border-radius:9px;padding:9px 13px;background:#152f40;color:#fff;font:600 .78rem Manrope;cursor:pointer}
+.cloud-save-row{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.cloud-sync button:disabled{opacity:.5;cursor:not-allowed}
+.cloud-sync .scenario-message{margin:14px 0 0;padding:10px 12px;border-radius:9px;background:#eaf9f1;color:#147e5a;font-size:.78rem;font-weight:700}
+.cloud-privacy-note{margin-top:20px;padding-top:14px;border-top:1px solid #e1e9ec;color:#68798a;font-size:.72rem}
+.dark-mode .cloud-sync{background:linear-gradient(135deg,#10241f,#132b30);border-color:#23795e}
+.dark-mode .cloud-account{background:#12342c;border-color:#23795e;color:#e3edf0}
+.dark-mode .cloud-account span,.dark-mode .cloud-privacy-note{color:#afc0c6}
+.dark-mode .cloud-account button,.dark-mode .cloud-save-row button{background:#55d5a6;color:#08251e;border-color:#55d5a6}
+.dark-mode .cloud-privacy-note{border-color:#38515d}
+@media(max-width:560px){.cloud-sync .controls{grid-template-columns:1fr}.cloud-sync{padding:16px 12px}.cloud-account{align-items:flex-start;flex-direction:column}.cloud-account b{flex:auto}.cloud-save-row button{flex:1}}
