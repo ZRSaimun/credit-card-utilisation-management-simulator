@@ -415,6 +415,33 @@ function App() {
               </div>
             ))}
           </section>
+          <section className="panel debt-conservation">
+            <div className="row">
+              <div><span className="eyebrow">BALANCE RECONCILIATION</span><h2>Where the debt can—and cannot—go</h2></div>
+              <span className="pill green">SIMULATION MATH</span>
+            </div>
+            <p className="muted">Moving a balance between cards changes which card owes it. It does not reduce total debt. Only a repayment funded from outside the card balances reduces the total.</p>
+            <div className="conservation-stats">
+              <div><span>Total card limits</span><b>{formatGBP(s.limit)}</b></div>
+              <div><span>50% total-balance ceiling</span><b>{formatGBP(s.target)}</b></div>
+              <div><span>Current total balances</span><b>{formatGBP(s.balance)}</b></div>
+              <div className={s.diff > 0 ? "needs-payment" : "meets-target"}><span>Cash reduction needed for 50% overall</span><b>{formatGBP(s.diff)}</b></div>
+            </div>
+            <div className="conservation-transfer">
+              <div><span>Simulated balance that can be reallocated</span><b>{formatGBP(transferPlan.transferTotal)}</b></div>
+              <div><span>Repayment still needed after reallocation</span><b>{formatGBP(transferPlan.repaymentTotal)}</b></div>
+            </div>
+            <h3>Current monthly-cycle assumptions</h3>
+            <div className="conservation-equation" aria-label="Projected debt equation">
+              <div><span>Opening balances</span><b>{formatGBP(s.balance)}</b></div>
+              <i>+</i><div><span>New spending</span><b>{formatGBP((cardSpendTotal || spend) * months)}</b></div>
+              <i>+</i><div><span>Modeled fees</span><b>{formatGBP(status.fees)}</b></div>
+              <i>−</i><div><span>Simulated bank-funded repayments</span><b>{formatGBP(payment * months)}</b></div>
+              <i>−</i><div><span>One-time external adjustment</span><b>{formatGBP(external ? s.diff : 0)}</b></div>
+              <i>=</i><div className="equation-total"><span>Projected closing debt</span><b>{formatGBP(status.closing)}</b></div>
+            </div>
+            <p className="conservation-note"><b>How to read this:</b> the transfer amount above only redistributes balances. If the repayment budget or external adjustment is £0, transfers alone cannot close the {formatGBP(s.diff)} gap shown by the current card balances.</p>
+          </section>
           <section className="grid two">
             <div className="panel">
               <h2>Utilisation health</h2>
