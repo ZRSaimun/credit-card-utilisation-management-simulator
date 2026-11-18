@@ -5,6 +5,7 @@ import "./styles.css";
 import { AuthButton } from "./components/AuthButton";
 import { ClerkSessionBridge } from "./components/ClerkSessionBridge";
 import { UpgradeButton } from "./components/UpgradeButton";
+import { SaveSimulationButton } from "./components/SaveSimulationButton";
 import { track } from "./lib/posthog";
 import {
   Card,
@@ -1176,7 +1177,7 @@ function App() {
           </div>
           <section className="scenario-manager">
             <div className="row"><div><h3>Saved scenarios</h3><p className="muted">Stored only in this browser. They do not sync across devices.</p></div><span className="pill green">{savedScenarios.length} SAVED</span></div>
-            <div className="scenario-save-row"><label>Scenario name<input value={scenarioName} onChange={e=>setScenarioName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveScenario();}} placeholder="e.g. Assignment baseline"/></label><button onClick={saveScenario}>Save current scenario</button></div>
+            <div className="scenario-save-row"><label>Scenario name<input value={scenarioName} onChange={e=>setScenarioName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveScenario();}} placeholder="e.g. Assignment baseline"/></label><div className="scenario-save-actions"><button onClick={saveScenario}>Save current scenario</button>{clerkPublishableKey && <SaveSimulationButton name={scenarioName} cardData={{ cards, settings: currentScenarioSettings() }} />}</div></div>
             <div className="actions"><button onClick={exportScenarioBackup} disabled={!savedScenarios.length}>Export backup JSON</button><button onClick={()=>importInputRef.current?.click()}>Import backup JSON</button><input ref={importInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={e=>{const file=e.currentTarget.files?.[0];e.currentTarget.value="";void importScenarioBackup(file);}}/></div>
             {scenarioMessage && <p className="scenario-message" role="status">{scenarioMessage}</p>}
             {savedScenarios.length ? <div className="saved-scenario-list">{savedScenarios.map(snapshot=><article className="saved-scenario" key={snapshot.id}><div><b>{snapshot.name}</b><small>Saved {new Date(snapshot.savedAt).toLocaleString()} · {snapshot.cards.length} cards · {snapshot.settings.months} month(s)</small></div><div className="saved-scenario-actions"><button onClick={()=>loadScenario(snapshot)}>Load</button><button onClick={()=>renameScenario(snapshot)}>Rename</button><button onClick={()=>deleteScenario(snapshot)}>Delete</button></div></article>)}</div> : <p className="muted">No saved scenarios yet. Enter a name and save the current setup.</p>}
