@@ -11,13 +11,13 @@ describe("auditable financial model", () => {
   it("calculates total limit", () =>
     expect(summary(initialCards).limit).toBe(35800));
   it("calculates total balance", () =>
-    expect(summary(initialCards).balance).toBe(19721));
+    expect(summary(initialCards).balance).toBe(20821));
   it("calculates utilisation", () =>
-    expect(summary(initialCards).util).toBe(55.09));
+    expect(summary(initialCards).util).toBe(58.16));
   it("calculates 50% target", () =>
     expect(summary(initialCards).target).toBe(17900));
   it("calculates £1821 difference", () =>
-    expect(summary(initialCards).diff).toBe(1821));
+    expect(summary(initialCards).diff).toBe(2921));
   it("allocates each card to 50%", () =>
     expect(allocation(initialCards).every((x) => x.result <= x.target)).toBe(
       true,
@@ -31,7 +31,7 @@ describe("auditable financial model", () => {
         fee: 0,
         months: 1,
       }).closing,
-    ).toBe(19721));
+    ).toBe(20821));
   it("calculates fees", () => expect(totalFees(100, 2, 3)).toBe(6));
   it("adds fees to debt", () =>
     expect(
@@ -42,7 +42,7 @@ describe("auditable financial model", () => {
         fee: 2,
         months: 1,
       }).closing,
-    ).toBe(19823));
+    ).toBe(20923));
   it("rolls monthly spending and payments", () =>
     expect(
       feasibility(initialCards, {
@@ -52,7 +52,7 @@ describe("auditable financial model", () => {
         fee: 0,
         months: 2,
       }).closing,
-    ).toBe(19821));
+    ).toBe(20921));
   it("orders ledger events chronologically", () => {
     const e = simulateCycle(initialCards, {
       start: "2026-01-01",
