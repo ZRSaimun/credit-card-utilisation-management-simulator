@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -18,6 +18,45 @@ import {
   downloadBlob,
 } from "./model";
 import { amortisation, dailyInterest, effectiveAnnualRate, fixedPayment, payoffMonths } from "./financialMath";
+type ScenarioSettings = {
+  external: boolean;
+  spend: number;
+  spendByCard: Record<string, number>;
+  payment: number;
+  fee: number;
+  months: number;
+  start: string;
+  selectedCycleMonth: number;
+};
+type SavedScenario = {
+  id: string;
+  name: string;
+  savedAt: string;
+  cards: Card[];
+  settings: ScenarioSettings;
+};
+const SCENARIO_STORAGE_KEY = "credit-card-utilisation-simulator-scenarios-v1";
+function isSavedScenario(value: any): value is SavedScenario {
+  return !!value && typeof value.id === "string" && typeof value.name === "string" &&
+    typeof value.savedAt === "string" && Array.isArray(value.cards) &&
+    value.cards.every((card: any) => card && typeof card.name === "string" &&
+      typeof card.provider === "string" && Number.isFinite(card.limit) &&
+      Number.isFinite(card.balance)) &&
+    value.settings && typeof value.settings === "object" &&
+    typeof value.settings.external === "boolean" && Number.isFinite(value.settings.spend) &&
+    Number.isFinite(value.settings.payment) && Number.isFinite(value.settings.fee) &&
+    Number.isFinite(value.settings.months) && typeof value.settings.start === "string";
+}
+function readSavedScenarios(): SavedScenario[] {
+  try {
+    const saved = window.localStorage.getItem(SCENARIO_STORAGE_KEY);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.filter(isSavedScenario) : [];
+  } catch {
+    return [];
+  }
+}
 const empty: Card = { name: "", provider: "", limit: 0, balance: 0 };
 function FinancialMathLab() {
   const [principal, setPrincipal] = useState(1000);
@@ -66,6 +105,11 @@ function App() {
   const [months, setMonths] = useState(1);
   const [selectedCycleMonth, setSelectedCycleMonth] = useState(1);
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  const [scenarioName, setScenarioName] = useState("Assignment scenario");
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(readSavedScenarios);
+  const [scenarioMessage, setScenarioMessage] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
@@ -121,6 +165,79 @@ function App() {
       return { ...card, opening, spending, repayments, closing, utilisation: card.limit ? closing / card.limit * 100 : 0 };
     });
   }, [cards, events, start, selectedCycleMonth, selectedMonthEvents]);
+  const storeSavedScenarios = (next: SavedScenario[]) => {
+    try {
+      window.localStorage.setItem(SCENARIO_STORAGE_KEY, JSON.stringify(next));
+      setSavedScenarios(next);
+      return true;
+    } catch {
+      setScenarioMessage("Could not save in this browser. Check available site storage and try again.");
+      return false;
+    }
+  };
+  const saveScenario = () => {
+    const name = scenarioName.trim();
+    if (!name) {
+      setScenarioMessage("Enter a name for this scenario first.");
+      return;
+    }
+    const snapshot: SavedScenario = {
+      id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+      name,
+      savedAt: new Date().toISOString(),
+      cards: cards.map(card => ({ ...card })),
+      settings: { external, spend, spendByCard: { ...spendByCard }, payment, fee, months, start, selectedCycleMonth },
+    };
+    if (storeSavedScenarios([snapshot, ...savedScenarios])) {
+      setScenarioMessage("Saved “" + name + "” in this browser.");
+    }
+  };
+  const loadScenario = (snapshot: SavedScenario) => {
+    setCards(snapshot.cards.map(card => ({ ...card })));
+    setExternal(snapshot.settings.external);
+    setSpend(snapshot.settings.spend);
+    setSpendByCard({ ...snapshot.settings.spendByCard });
+    setPayment(snapshot.settings.payment);
+    setFee(snapshot.settings.fee);
+    setMonths(snapshot.settings.months);
+    setStart(snapshot.settings.start);
+    setSelectedCycleMonth(Math.max(1, Math.min(snapshot.settings.months, snapshot.settings.selectedCycleMonth || 1)));
+    setScenarioMessage("Loaded “" + snapshot.name + "”.");
+    setTab("Monthly Cycle");
+  };
+  const renameScenario = (snapshot: SavedScenario) => {
+    const name = window.prompt("Enter a new scenario name", snapshot.name)?.trim();
+    if (!name || name === snapshot.name) return;
+    const next = savedScenarios.map(item => item.id === snapshot.id ? { ...item, name } : item);
+    if (storeSavedScenarios(next)) setScenarioMessage("Renamed scenario to “" + name + "”.");
+  };
+  const deleteScenario = (snapshot: SavedScenario) => {
+    if (!window.confirm("Delete saved scenario “" + snapshot.name + "”?")) return;
+    const next = savedScenarios.filter(item => item.id !== snapshot.id);
+    if (storeSavedScenarios(next)) setScenarioMessage("Deleted “" + snapshot.name + "”.");
+  };
+  const exportScenarioBackup = () => {
+    downloadBlob(JSON.stringify({ format: "cc-utilisation-scenarios-v1", exportedAt: new Date().toISOString(), scenarios: savedScenarios }, null, 2), "credit-card-scenarios-backup.json", "application/json");
+    setScenarioMessage("Scenario backup downloaded.");
+  };
+  const importScenarioBackup = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      const candidates = Array.isArray(parsed) ? parsed : parsed?.scenarios;
+      const imported = Array.isArray(candidates) ? candidates.filter(isSavedScenario) : [];
+      if (!imported.length) {
+        setScenarioMessage("No valid scenarios were found in that backup.");
+        return;
+      }
+      const merged = new Map(savedScenarios.map(item => [item.id, item]));
+      imported.forEach(item => merged.set(item.id, item));
+      const next = [...merged.values()];
+      if (storeSavedScenarios(next)) setScenarioMessage("Imported " + imported.length + " scenario(s).");
+    } catch {
+      setScenarioMessage("Could not read that backup file. Choose a valid simulator JSON backup.");
+    }
+  };
   const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
@@ -764,26 +881,15 @@ function App() {
             >
               Download PDF
             </button>
-            <button
-              onClick={() =>
-                fetch("/api/scenarios", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: "Assignment scenario",
-                    payload: { cards, options: opts, events },
-                  }),
-                }).then(() =>
-                  alert(
-                    "Scenario saved to the local SQLite simulation database.",
-                  ),
-                )
-              }
-            >
-              Save scenario
-            </button>
             <button onClick={() => window.print()}>Print</button>
           </div>
+          <section className="scenario-manager">
+            <div className="row"><div><h3>Saved scenarios</h3><p className="muted">Stored only in this browser. They do not sync across devices.</p></div><span className="pill green">{savedScenarios.length} SAVED</span></div>
+            <div className="scenario-save-row"><label>Scenario name<input value={scenarioName} onChange={e=>setScenarioName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveScenario();}} placeholder="e.g. Assignment baseline"/></label><button onClick={saveScenario}>Save current scenario</button></div>
+            <div className="actions"><button onClick={exportScenarioBackup} disabled={!savedScenarios.length}>Export backup JSON</button><button onClick={()=>importInputRef.current?.click()}>Import backup JSON</button><input ref={importInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={e=>{const file=e.currentTarget.files?.[0];e.currentTarget.value="";void importScenarioBackup(file);}}/></div>
+            {scenarioMessage && <p className="scenario-message" role="status">{scenarioMessage}</p>}
+            {savedScenarios.length ? <div className="saved-scenario-list">{savedScenarios.map(snapshot=><article className="saved-scenario" key={snapshot.id}><div><b>{snapshot.name}</b><small>Saved {new Date(snapshot.savedAt).toLocaleString()} · {snapshot.cards.length} cards · {snapshot.settings.months} month(s)</small></div><div className="saved-scenario-actions"><button onClick={()=>loadScenario(snapshot)}>Load</button><button onClick={()=>renameScenario(snapshot)}>Rename</button><button onClick={()=>deleteScenario(snapshot)}>Delete</button></div></article>)}</div> : <p className="muted">No saved scenarios yet. Enter a name and save the current setup.</p>}
+          </section>
           <pre>{buildReport(cards, status, events)}</pre>
         </section>
       )}
