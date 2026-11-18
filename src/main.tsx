@@ -162,7 +162,7 @@ function App() {
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
-  const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
+  const chartData = useMemo(() => cards.map((c) => ({ name: c.name, utilisation: c.balance / c.limit * 100 })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((sum,item)=>sum+item.result,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "After 50% gap payment", balance: s.target }], [s,a]);
   const cardDateEvents = useMemo(() => [
     ...cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:"Day " + x.day }))),
