@@ -24,6 +24,8 @@ type ScenarioSettings = {
   spendByCard: Record<string, number>;
   payment: number;
   cashBudget?: number;
+  startingCash?: number;
+  paydayDay?: number;
   fee: number;
   months: number;
   start: string;
@@ -46,7 +48,7 @@ function isSavedScenario(value: any): value is SavedScenario {
     value.settings && typeof value.settings === "object" &&
     typeof value.settings.external === "boolean" && Number.isFinite(value.settings.spend) &&
     value.settings.spendByCard && typeof value.settings.spendByCard === "object" &&
-    Number.isFinite(value.settings.payment) && (value.settings.cashBudget === undefined || Number.isFinite(value.settings.cashBudget)) && Number.isFinite(value.settings.fee) &&
+    Number.isFinite(value.settings.payment) && (value.settings.cashBudget === undefined || Number.isFinite(value.settings.cashBudget)) && (value.settings.startingCash === undefined || Number.isFinite(value.settings.startingCash)) && (value.settings.paydayDay === undefined || Number.isFinite(value.settings.paydayDay)) && Number.isFinite(value.settings.fee) &&
     Number.isFinite(value.settings.months) && Number.isFinite(value.settings.selectedCycleMonth) &&
     typeof value.settings.start === "string";
 }
@@ -105,7 +107,8 @@ function App() {
   const [spendByCard, setSpendByCard] = useState<Record<string, number>>({});
   const [payment, setPayment] = useState(0);
   const [cashBudget, setCashBudget] = useState(0);
-  const effectivePayment = Math.min(payment, cashBudget);
+  const [startingCash, setStartingCash] = useState(0);
+  const [paydayDay, setPaydayDay] = useState(1);
   const [fee, setFee] = useState(0);
   const [months, setMonths] = useState(1);
   const [selectedCycleMonth, setSelectedCycleMonth] = useState(1);
@@ -123,23 +126,24 @@ function App() {
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
   const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
-  const opts = { external: external ? s.diff : 0, spend: cardSpendTotal || spend, payment: effectivePayment, fee, months };
-  const status = useMemo(
-    () => feasibility(cards, opts),
-    [cards, external, spend, payment, cashBudget, fee, months],
-  );
   const events = useMemo(
-    () =>
-      simulateCycle(cards, {
-        start,
-        months,
-        spend: cardSpendTotal || spend,
-        payment: effectivePayment,
-        external: external ? s.diff : 0,
-        fee,
-      }),
-    [cards, start, months, spend, payment, cashBudget, external, fee],
+    () => simulateCycle(cards, {
+      start,
+      months,
+      spend: cardSpendTotal || spend,
+      payment,
+      external: external ? s.diff : 0,
+      fee,
+      startingCash,
+      monthlyCashInflow: cashBudget,
+      incomeDay: paydayDay,
+    }),
+    [cards, start, months, spend, cardSpendTotal, payment, cashBudget, startingCash, paydayDay, external, fee, s.diff],
   );
+  const actualRepaymentTotal = useMemo(() => events.filter(event => event.type === "Direct Debit").reduce((sum, event) => sum + event.amount, 0), [events]);
+  const actualOneTimePayment = useMemo(() => events.filter(event => event.type === "One-time payment").reduce((sum, event) => sum + event.amount, 0), [events]);
+  const opts = { external: actualOneTimePayment, spend: cardSpendTotal || spend, payment: months > 0 ? actualRepaymentTotal / months : 0, fee, months };
+  const status = useMemo(() => feasibility(cards, opts), [cards, actualOneTimePayment, actualRepaymentTotal, cardSpendTotal, spend, fee, months]);
   const selectedMonthEvents = useMemo(() => {
     const base = new Date(start + "T00:00:00Z");
     base.setUTCDate(1);
@@ -191,7 +195,7 @@ function App() {
       name,
       savedAt: new Date().toISOString(),
       cards: cards.map(card => ({ ...card })),
-      settings: { external, spend, spendByCard: { ...spendByCard }, payment, cashBudget, fee, months, start, selectedCycleMonth },
+      settings: { external, spend, spendByCard: { ...spendByCard }, payment, cashBudget, startingCash, paydayDay, fee, months, start, selectedCycleMonth },
     };
     if (storeSavedScenarios([snapshot, ...savedScenarios])) {
       setScenarioMessage("Saved “" + name + "” in this browser.");
@@ -204,6 +208,8 @@ function App() {
     setSpendByCard({ ...snapshot.settings.spendByCard });
     setPayment(snapshot.settings.payment);
     setCashBudget(snapshot.settings.cashBudget ?? 0);
+    setStartingCash(snapshot.settings.startingCash ?? 0);
+    setPaydayDay(snapshot.settings.paydayDay ?? 1);
     setFee(snapshot.settings.fee);
     setMonths(snapshot.settings.months);
     setStart(snapshot.settings.start);
@@ -335,8 +341,10 @@ function App() {
       ["Mode", "Simulation only"],
       ["Transfer fee default", "0%"],
       ["Requested repayment / month", formatGBP(payment)],
-      ["Cash available / month", formatGBP(cashBudget)],
-      ["Effective simulated repayment / month", formatGBP(effectivePayment)],
+      ["Starting cash balance", formatGBP(startingCash)],
+      ["Monthly cash inflow", formatGBP(cashBudget)],
+      ["Cash arrival day", `Day ${paydayDay}`],
+      ["Cash-funded simulated repayments", formatGBP(actualRepaymentTotal)],
       ["External cycle payment", "£0"],
       ["One-time adjustment", external ? s.diff : 0],
       [
@@ -444,8 +452,8 @@ function App() {
               <div><span>Opening balances</span><b>{formatGBP(s.balance)}</b></div>
               <i>+</i><div><span>New spending</span><b>{formatGBP((cardSpendTotal || spend) * months)}</b></div>
               <i>+</i><div><span>Modeled fees</span><b>{formatGBP(status.fees)}</b></div>
-              <i>−</i><div><span>Simulated bank-funded repayments</span><b>{formatGBP(effectivePayment * months)}</b></div>
-              <i>−</i><div><span>One-time external adjustment</span><b>{formatGBP(external ? s.diff : 0)}</b></div>
+              <i>−</i><div><span>Simulated bank-funded repayments</span><b>{formatGBP(actualRepaymentTotal)}</b></div>
+              <i>−</i><div><span>One-time external adjustment</span><b>{formatGBP(actualOneTimePayment)}</b></div>
               <i>=</i><div className="equation-total"><span>Projected closing debt</span><b>{formatGBP(status.closing)}</b></div>
             </div>
             <p className="conservation-note"><b>How to read this:</b> the transfer amount above only redistributes balances. If the repayment budget or external adjustment is £0, transfers alone cannot close the {formatGBP(s.diff)} gap shown by the current card balances.</p>
@@ -468,10 +476,10 @@ function App() {
                   Transfer fee: <b>{fee}%</b>
                 </li>
                 <li>
-                  Recurring external payment: <b>£0</b>
+                  Monthly simulated cash inflow: <b>{formatGBP(cashBudget)}</b> on day {paydayDay}
                 </li>
                 <li>
-                  One-time payment to 50% overall: <b>{formatGBP(s.diff)}</b>{" "}
+                  One-time payment funded: <b>{formatGBP(actualOneTimePayment)}</b>{" "}
                   {external ? "included" : "not included"}
                 </li>
                 <li>Target: every card ≤ 50%</li>
@@ -692,13 +700,21 @@ function App() {
               />
             </label>
             <label>
-              Cash available for card payments / month
+              Monthly cash inflow into payment account
               <input
                 type="number"
                 min="0"
                 value={cashBudget}
                 onChange={(e) => setCashBudget(Math.max(0, +e.target.value))}
               />
+            </label>
+            <label>
+              Starting cash balance
+              <input type="number" min="0" value={startingCash} onChange={e => setStartingCash(Math.max(0, +e.target.value))} />
+            </label>
+            <label>
+              Cash inflow day (1–28)
+              <input type="number" min="1" max="28" value={paydayDay} onChange={e => setPaydayDay(Math.min(28, Math.max(1, +e.target.value)))} />
             </label>
             <label>
               Transfer fee %
@@ -710,8 +726,8 @@ function App() {
               />
             </label>
           </div>
-          {payment > cashBudget && <p className="result danger"><b>Funding shortfall:</b> requested repayments exceed the monthly cash budget by {formatGBP(payment - cashBudget)}. The simulation limits repayments to {formatGBP(effectivePayment)} per month.</p>}
-          <p className="muted cash-budget-note">Cash budget means money already available outside the credit-card balances for these simulated payments. It is not generated by card transfers. Payment dates and income timing are not yet modelled.</p>
+          {actualRepaymentTotal < payment * months && <p className="result danger"><b>Funding shortfall:</b> the plan requested {formatGBP(payment * months)} in Direct Debit repayments, but only {formatGBP(actualRepaymentTotal)} was funded on the simulated payment dates. Unfunded amounts remain debt.</p>}
+          <p className="muted cash-budget-note">Starting cash and monthly cash inflows are tracked by date. Unused cash rolls forward. A cash inflow on the same day as a Direct Debit is applied after that debit; weekends and bank holidays are not adjusted.</p>
           <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div><button className="planner-export" onClick={exportSelectedMonth}>Export month CSV</button></div>
           <div className="card-spend-grid">
             <h3>New spending by card / month</h3>
