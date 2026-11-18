@@ -44,8 +44,10 @@ function isSavedScenario(value: any): value is SavedScenario {
       Number.isFinite(card.balance)) &&
     value.settings && typeof value.settings === "object" &&
     typeof value.settings.external === "boolean" && Number.isFinite(value.settings.spend) &&
+    value.settings.spendByCard && typeof value.settings.spendByCard === "object" &&
     Number.isFinite(value.settings.payment) && Number.isFinite(value.settings.fee) &&
-    Number.isFinite(value.settings.months) && typeof value.settings.start === "string";
+    Number.isFinite(value.settings.months) && Number.isFinite(value.settings.selectedCycleMonth) &&
+    typeof value.settings.start === "string";
 }
 function readSavedScenarios(): SavedScenario[] {
   try {
