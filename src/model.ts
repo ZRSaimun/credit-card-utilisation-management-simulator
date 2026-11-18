@@ -24,7 +24,7 @@ export type Event = {
   cashAfter?: number;
 };
 export const initialCards: Card[] = [
-  ["Capital One A", "Capital One", 2250, 1100, 28, 20],
+  ["Capital One A", "Capital One", 2250, 0, 28, 20],
   ["Capital One B", "Capital One", 1000, 645, 22, 15],
   ["Barclays Rewards", "Barclays", 300, 35, 5, 30],
   ["Santander A", "Santander", 3300, 2006, undefined, 1],
