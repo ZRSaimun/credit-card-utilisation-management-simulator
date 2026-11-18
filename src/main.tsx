@@ -432,6 +432,7 @@ function App() {
               <div><span>Repayment still needed after reallocation</span><b>{formatGBP(transferPlan.repaymentTotal)}</b></div>
             </div>
             <h3>Current monthly-cycle assumptions</h3>
+            <p className="equation-formula">Opening debt + spending + fees − repayments − external adjustment = closing debt</p>
             <div className="conservation-equation" aria-label="Projected debt equation">
               <div><span>Opening balances</span><b>{formatGBP(s.balance)}</b></div>
               <i>+</i><div><span>New spending</span><b>{formatGBP((cardSpendTotal || spend) * months)}</b></div>
