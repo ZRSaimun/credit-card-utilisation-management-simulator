@@ -274,7 +274,19 @@ export function simulateCycle(
       emit(iso(1), "Fee", "Transfer facility", "Cards", fee, "Transfer fee", undefined, fee);
     }
     if (month === 0 && o.external > 0) {
-      emit(iso(1), "Accounting adjustment", "External payment / loss", "Ledger", o.external, "One-time accounting adjustment", undefined, -o.external);
+      const balances = Array.from(state.values());
+      const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
+      let adjustmentRemaining = Math.min(o.external, balanceTotal);
+      balances.forEach((card, index) => {
+        if (adjustmentRemaining <= 0 || balanceTotal <= 0) return;
+        const amount = index === balances.length - 1
+          ? adjustmentRemaining
+          : Math.min(card.balance, o.external * (card.balance / balanceTotal));
+        if (amount > 0) {
+          emit(iso(1), "Accounting adjustment", "External payment / loss", card.name, amount, "One-time adjustment allocated proportionally", card.name, -amount);
+          adjustmentRemaining -= amount;
+        }
+      });
     }
     emit(iso(new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()), "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", undefined, 0);
   }
