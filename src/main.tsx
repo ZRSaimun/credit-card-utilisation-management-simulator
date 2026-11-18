@@ -1154,20 +1154,8 @@ function App() {
             <button onClick={exportXlsx}>Export Excel workbook</button>
             <button
               onClick={async () => {
-                const { jsPDF } = await import("jspdf");
-                const doc = new jsPDF();
-                doc.setFontSize(16);
-                doc.text(
-                  "Credit Card Utilisation Management Simulator",
-                  14,
-                  18,
-                );
-                doc.setFontSize(9);
-                doc.text(
-                  doc.splitTextToSize(buildReport(cards, status, events, external ? s.diff : 0), 180),
-                  14,
-                  28,
-                );
+                const { createReportPdf } = await import("./reportPdf");
+                const doc = createReportPdf(buildReport(cards, status, events, external ? s.diff : 0));
                 doc.save("simulation-report.pdf");
               }}
             >
