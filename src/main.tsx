@@ -130,7 +130,7 @@ function App() {
   };
   const exportSelectedMonth = () => {
     const rows = [["Month", "Card", "Opening", "Repayment", "Spending", "Closing", "Utilisation", "Status"]];
-    selectedMonthSummary.forEach(card => rows.push(["Month " + selectedCycleMonth, card.name, card.balance.toFixed(2), card.repayments.toFixed(2), card.spending.toFixed(2), card.closing.toFixed(2), (card.utilisation / 100).toFixed(4), card.utilisation > 50 ? "Above 50%" : "Within target"]));
+    selectedMonthSummary.forEach(card => rows.push(["Month " + selectedCycleMonth, card.name, card.opening.toFixed(2), card.repayments.toFixed(2), card.spending.toFixed(2), card.closing.toFixed(2), (card.utilisation / 100).toFixed(4), card.utilisation > 50 ? "Above 50%" : "Within target"]));
     rows.push([]);
     rows.push(["Date", "Event", "Source", "Destination", "Amount", "Reason"]);
     selectedMonthEvents.forEach((event: any) => rows.push([event.date, event.type, event.source, event.destination, event.amount.toFixed(2), event.reason]));
