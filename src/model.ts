@@ -237,11 +237,17 @@ export function simulateCycle(
         }
       }
       if (remaining > 0) {
-        const room = ordered.reduce((sum, c) => sum + Math.max(0, c.limit - c.balance), 0);
-        const amount = Math.min(remaining, room);
-        if (amount > 0) {
-          emit(iso(1), "New spending", "User", "Cards", amount, "Spend beyond 50% headroom; flagged", undefined, amount);
-          remaining -= amount;
+        const overTargetOrder = Array.from(state.values()).sort(
+          (a, b) => (b.limit - b.balance) - (a.limit - a.balance),
+        );
+        for (const card of overTargetOrder) {
+          if (remaining <= 0) break;
+          const available = Math.max(0, card.limit - card.balance);
+          const amount = Math.min(remaining, available);
+          if (amount > 0) {
+            emit(iso(1), "New spending", "User", card.name, amount, "Spend beyond 50% headroom; flagged", card.name, amount);
+            remaining -= amount;
+          }
         }
       }
       if (remaining > 0) {
