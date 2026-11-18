@@ -1,2 +1,25 @@
-<div id="root"></div><script type="module" src="/src/main.tsx"></script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#102239" />
+    <meta name="description" content="An educational simulator for credit-card utilisation, repayment timing and 50% target planning." />
+    <link rel="icon" type="image/svg+xml" href="/credit-card-utilisation-management-simulator/favicon.svg" />
+    <title>Credit Card Utilisation Management Simulator</title>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot-status" class="boot-status" role="status" aria-live="polite">
+        Loading the simulator…
+      </div>
+    </div>
+    <noscript>
+      <div class="noscript-message">
+        This simulator needs JavaScript to run. Please enable JavaScript and reload the page.
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 
