@@ -9,6 +9,7 @@ import {
   initialCards,
   summary,
   allocation,
+  planTransfersToFiftyPercent,
   feasibility,
   formatGBP,
   exportCSV,
@@ -67,6 +68,7 @@ function App() {
   const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
+  const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
@@ -446,6 +448,13 @@ function App() {
             money.
           </p>
           <div className="transfer-builder"><div className="row"><div><h3>Transfer builder</h3><p className="muted">Preview a simulated card-to-card transfer. No real transfer is created.</p></div><span className="pill green">LEDGER PREVIEW</span></div><div className="controls"><label>Source card<select value={transferSource} onChange={e=>setTransferSource(e.target.value)}><option value="">Choose source</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Destination card<select value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">Choose destination</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Transfer amount<input type="number" min="0" value={transferAmount} onChange={e=>setTransferAmount(+e.target.value)}/></label><label>Fee %<input type="number" min="0" value={transferFee} onChange={e=>setTransferFee(+e.target.value)}/></label></div>{transferPreview.source&&transferPreview.destination&&transferPreview.source!==transferPreview.destination&&<div className="transfer-preview"><p><b>{formatGBP(transferPreview.amount)}</b> moves from {transferPreview.source.name} to {transferPreview.destination.name}.</p><p>Source after: <b>{formatGBP(transferPreview.source.balance-transferPreview.amount)}</b> · Destination after: <b>{formatGBP(transferPreview.destination.balance+transferPreview.amount)}</b></p><p className="warning">Total debt change: <b>+{formatGBP(transferPreview.totalDebtChange)}</b> from fees. The transfer itself creates no debt reduction.</p></div>}</div>
+          <section className="suggested-transfer-plan">
+            <div className="row"><div><h3>Suggested simulated transfer plan</h3><p className="muted">Routes move existing balances into cards with room below 50%.</p></div><span className="pill green">0% FEE ASSUMPTION</span></div>
+            <div className="plan-totals"><div><span>Can be reallocated</span><b>{formatGBP(transferPlan.transferTotal)}</b></div><div><span>Repayment still required</span><b>{formatGBP(transferPlan.repaymentTotal)}</b></div></div>
+            {transferPlan.transfers.length > 0 ? <table><thead><tr><th>Take from</th><th>Put into</th><th>Amount</th></tr></thead><tbody>{transferPlan.transfers.map((route,index)=><tr key={route.source+route.destination+index}><td>{route.source}</td><td>{route.destination}</td><td><b>{formatGBP(route.amount)}</b></td></tr>)}</tbody></table> : <p className="ok">No card-to-card reallocation is needed.</p>}
+            {transferPlan.repayments.length > 0 && <><h3>Amount to repay to reach 50%</h3><table><thead><tr><th>Card to pay down</th><th>Repayment needed</th></tr></thead><tbody>{transferPlan.repayments.map(item=><tr key={item.card}><td>{item.card}</td><td><b>{formatGBP(item.amount)}</b></td></tr>)}</tbody></table></>}
+            <p className="callout">Transfer routes alone cannot lower total debt. These are simulated only. If a route or fee differs in the real product, do not use it as a payment instruction.</p>
+          </section>
           <table>
             <thead>
               <tr>
