@@ -123,7 +123,10 @@ function App() {
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((sum,item)=>sum+item.result,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "After 50% gap payment", balance: s.target }], [s,a]);
-  const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
+  const cardDateEvents = useMemo(() => [
+    ...cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:"Day " + x.day }))),
+    ...(cashBudget > 0 ? [{ day:paydayDay, type:"Cash inflow", card:"Simulated payment account", date:"Day " + paydayDay }] : []),
+  ].sort((x,y)=>(x.day as number)-(y.day as number)), [cards, cashBudget, paydayDay]);
   const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
   const events = useMemo(
@@ -155,6 +158,7 @@ function App() {
       return date.getUTCFullYear() === year && date.getUTCMonth() === month;
     });
   }, [events, start, selectedCycleMonth]);
+  const selectedMonthCashBalance = selectedMonthEvents.filter(event => event.type === "Cash balance").at(-1)?.amount ?? (selectedCycleMonth === 1 ? startingCash : 0);
   const selectedMonthSummary = useMemo(() => {
     const monthStart = new Date(start + "T00:00:00Z");
     monthStart.setUTCDate(1);
@@ -728,7 +732,7 @@ function App() {
           </div>
           {actualRepaymentTotal < payment * months && <p className="result danger"><b>Funding shortfall:</b> the plan requested {formatGBP(payment * months)} in Direct Debit repayments, but only {formatGBP(actualRepaymentTotal)} was funded on the simulated payment dates. Unfunded amounts remain debt.</p>}
           <p className="muted cash-budget-note">Starting cash and monthly cash inflows are tracked by date. Unused cash rolls forward. A cash inflow on the same day as a Direct Debit is applied after that debit; weekends and bank holidays are not adjusted.</p>
-          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div><button className="planner-export" onClick={exportSelectedMonth}>Export month CSV</button></div>
+          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Closing cash</span><b>{formatGBP(selectedMonthCashBalance)}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div><button className="planner-export" onClick={exportSelectedMonth}>Export month CSV</button></div>
           <div className="card-spend-grid">
             <h3>New spending by card / month</h3>
             <div className="controls">{cards.map(c=><label key={c.name}>{c.name}<input type="number" min="0" value={spendByCard[c.name] ?? 0} onChange={e=>setSpendByCard({...spendByCard,[c.name]:Math.max(0,+e.target.value)})}/></label>)}</div>
@@ -821,7 +825,7 @@ function App() {
             </tbody>
           </table>
           <h3>Chronological monthly date map</h3>
-          <table><thead><tr><th>Day</th><th>Event</th><th>Card</th><th>Funding note</th></tr></thead><tbody>{cardDateEvents.map(e=><tr><td>{e.date}</td><td>{e.type}</td><td>{e.card}</td><td className={e.type === "Direct Debit" && e.day === 1 ? "warning" : ""}>{e.type === "Direct Debit" && e.day === 1 ? "Needs funding before the 1st" : e.type === "Direct Debit" ? "Funding required before this date" : "Statement generated"}</td></tr>)}</tbody></table>
+          <table><thead><tr><th>Day</th><th>Event</th><th>Card</th><th>Funding note</th></tr></thead><tbody>{cardDateEvents.map(e=><tr><td>{e.date}</td><td>{e.type}</td><td>{e.card}</td><td className={e.type === "Direct Debit" && e.day === 1 ? "warning" : ""}>{e.type === "Direct Debit" && e.day === 1 ? "Needs funding before the 1st" : e.type === "Direct Debit" ? "Funding required before this date" : e.type === "Cash inflow" ? "Added to simulated account" : "Statement generated"}</td></tr>)}</tbody></table>
           <h3>Simulated event calendar</h3>
           <table>
             <thead>
