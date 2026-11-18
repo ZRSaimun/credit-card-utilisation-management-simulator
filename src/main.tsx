@@ -212,6 +212,29 @@ function App() {
       </nav>}
       {tab === "Dashboard" && (
         <>
+          <section className="dashboard-hero">
+            <div className="hero-copy">
+              <span className="eyebrow">EXECUTIVE CONTROL ROOM</span>
+              <h2>Know the position before the next cycle starts.</h2>
+              <p>Track utilisation, repayment pressure and the five-month simulated ledger from one clear view.</p>
+              <div className="hero-actions">
+                <button className="hero-primary" onClick={() => setTab("Monthly Cycle")}>Open monthly cycle</button>
+                <button className="hero-secondary" onClick={() => setPresentationMode(true)}>Start presentation</button>
+              </div>
+            </div>
+            <div className="hero-gauge-wrap">
+              <div className="hero-gauge" style={{background: "conic-gradient(#73edb9 0deg, #73edb9 " + Math.min(s.util,100)*3.6 + "deg, #ffffff18 " + Math.min(s.util,100)*3.6 + "deg 360deg)"}}>
+                <div className="hero-gauge-inner"><strong>{s.util}%</strong><span>used</span></div>
+              </div>
+              <div className="hero-gauge-meta"><b>50% target</b><span>{formatGBP(s.diff)} above target</span></div>
+            </div>
+          </section>
+          <section className="cycle-strip" aria-label="Simulation status">
+            <div><span className="strip-dot green-dot"></span><b>Simulation only</b><small>No bank connection</small></div>
+            <div><span className="strip-dot amber-dot"></span><b>{s.above} cards need attention</b><small>Above 50% utilisation</small></div>
+            <div><span className="strip-dot blue-dot"></span><b>0% transfer fee</b><small>Current assignment assumption</small></div>
+            <div><span className="strip-dot red-dot"></span><b>{status.label}</b><small>Based on current inputs</small></div>
+          </section>
           <section className="notice">
             <b>Simulation only.</b> No banks, payment systems, Direct Debits, or
             real money are connected. Transfers redistribute debt; they do not
