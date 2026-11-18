@@ -286,26 +286,24 @@ export function simulateCycle(
         emit(item.date, "Statement generation", item.card!.name, "Ledger", 0, "Simulated card statement", undefined, 0);
       } else if (item.kind === "oneoff") {
         const requested = Math.max(0, o.external);
-        const paid = Math.min(requested, cashBalance, total);
-        if (paid > 0) {
-          emit(item.date, "One-time payment", "Simulated bank account", "Card balances", paid,
-            "One-time payment limited by cash available", undefined, 0, -paid, -paid);
+        const funded = Math.min(requested, total);
+        if (funded > 0) {
+          emit(item.date, "One-time cash funding", "External source", "Simulated bank account", funded,
+            "Explicit external funds supplied for the selected one-time payment", undefined, 0, 0, funded);
+          emit(item.date, "Accounting adjustment", "Simulated bank account", "Card balances", funded,
+            "One-time payment applied from its explicitly modelled funding source", undefined, 0, -funded, -funded);
           const balances = Array.from(state.values());
           const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
-          let remaining = paid;
+          let remaining = funded;
           balances.forEach((card, index) => {
             if (remaining <= 0 || balanceTotal <= 0) return;
-            const amount = index === balances.length - 1 ? remaining : Math.min(card.balance, paid * (card.balance / balanceTotal));
+            const amount = index === balances.length - 1 ? remaining : Math.min(card.balance, funded * (card.balance / balanceTotal));
             if (amount > 0) {
-              emit(item.date, "Payment allocation", "One-time payment", card.name, amount,
+              emit(item.date, "Adjustment allocation", "Accounting adjustment", card.name, amount,
                 "Card-level allocation of the funded one-time payment", card.name, -amount, 0);
               remaining -= amount;
             }
           });
-        }
-        if (requested > paid) {
-          emit(item.date, "Unfunded one-time payment", "Simulated bank account", "Card balances", requested - paid,
-            "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
         }
       } else if (item.kind === "dd") {
         const card = item.card!;
