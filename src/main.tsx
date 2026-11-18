@@ -116,11 +116,11 @@ function App() {
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
   const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
-  const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "−£1,821", balance: s.balance-1821 }], [s,a]);
+  const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((x,y)=>x+y.reduce,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "Pay down to 50%", balance: s.target }], [s,a]);
   const cardDateEvents = useMemo(() => cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:`Day ${x.day}` }))).sort((x,y)=>(x.day as number)-(y.day as number)), [cards]);
   const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
-  const opts = { external: external ? 1821 : 0, spend: cardSpendTotal || spend, payment, fee, months };
+  const opts = { external: external ? s.diff : 0, spend: cardSpendTotal || spend, payment, fee, months };
   const status = useMemo(
     () => feasibility(cards, opts),
     [cards, external, spend, payment, fee, months],
@@ -132,7 +132,7 @@ function App() {
         months,
         spend: cardSpendTotal || spend,
         payment,
-        external: external ? 1821 : 0,
+        external: external ? s.diff : 0,
         fee,
       }),
     [cards, start, months, spend, payment, external, fee],
@@ -331,7 +331,7 @@ function App() {
       ["Mode", "Simulation only"],
       ["Transfer fee default", "0%"],
       ["External cycle payment", "£0"],
-      ["One-time adjustment", "£1,821"],
+      ["One-time adjustment", external ? s.diff : 0],
       [
         "Accounting formula",
         "Opening + spending + fees - repayments - external - adjustments = closing",
@@ -436,7 +436,7 @@ function App() {
                   Recurring external payment: <b>£0</b>
                 </li>
                 <li>
-                  One-time adjustment: <b>£1,821</b>{" "}
+                  One-time payment to 50% overall: <b>{formatGBP(s.diff)}</b>{" "}
                   {external ? "included" : "not included"}
                 </li>
                 <li>Target: every card ≤ 50%</li>
@@ -584,7 +584,7 @@ function App() {
           <section className="suggested-transfer-plan">
             <div className="row"><div><h3>Suggested simulated transfer plan</h3><p className="muted">Routes move existing balances into cards with room below 50%.</p></div><span className="pill green">0% FEE ASSUMPTION</span></div>
             <div className="plan-totals"><div><span>Can be reallocated</span><b>{formatGBP(transferPlan.transferTotal)}</b></div><div><span>Repayment still required</span><b>{formatGBP(transferPlan.repaymentTotal)}</b></div></div>
-            {transferPlan.transfers.length > 0 ? <table><thead><tr><th>Take from</th><th>Put into</th><th>Amount</th></tr></thead><tbody>{transferPlan.transfers.map((route,index)=><tr key={route.source+route.destination+index}><td>{route.source}</td><td>{route.destination}</td><td><b>{formatGBP(route.amount)}</b></td></tr>)}</tbody></table> : <p className="ok">No card-to-card reallocation is needed.</p>}
+            <div className="transfer-flow-wrap"><h3>Visual route map</h3><p className="muted">Each arrow shows a simulated balance movement. The exact amounts are listed below.</p><div className="transfer-flow-visual" aria-hidden="true">{transferPlan.transfers.map((route,index)=><div className="transfer-flow-row" key={"flow-"+route.source+route.destination+index}><div className="flow-node"><small>FROM</small><b>{route.source}</b></div><div className="flow-connector"><span>{formatGBP(route.amount)}</span><i>→</i></div><div className="flow-node flow-destination"><small>TO</small><b>{route.destination}</b></div></div>)}</div></div>{transferPlan.transfers.length > 0 ? <table><thead><tr><th>Take from</th><th>Put into</th><th>Amount</th></tr></thead><tbody>{transferPlan.transfers.map((route,index)=><tr key={route.source+route.destination+index}><td>{route.source}</td><td>{route.destination}</td><td><b>{formatGBP(route.amount)}</b></td></tr>)}</tbody></table> : <p className="ok">No card-to-card reallocation is needed.</p>}
             {transferPlan.repayments.length > 0 && <><h3>Amount to repay to reach 50%</h3><table><thead><tr><th>Card to pay down</th><th>Repayment needed</th></tr></thead><tbody>{transferPlan.repayments.map(item=><tr key={item.card}><td>{item.card}</td><td><b>{formatGBP(item.amount)}</b></td></tr>)}</tbody></table></>}
             <p className="callout">Transfer routes alone cannot lower total debt. These are simulated only. If a route or fee differs in the real product, do not use it as a payment instruction.</p>
           </section>
@@ -679,7 +679,7 @@ function App() {
               checked={external}
               onChange={(e) => setExternal(e.target.checked)}
             />{" "}
-            Include one-time £1,821 accounting adjustment
+            Include one-time {formatGBP(s.diff)} payment to reach 50% overall
           </label>
           <div className={status.ok ? "result ok" : "result danger"}>
             <b>{status.label}</b>
@@ -805,7 +805,7 @@ function App() {
                 [
                   "Exactly 50% overall",
                   s.target,
-                  s.diff ? "£1,821 required" : "£0",
+                  s.diff ? formatGBP(s.diff) + " repayment required" : "£0",
                   "Requires repayment",
                 ],
                 [
@@ -853,7 +853,7 @@ function App() {
             <button
               onClick={() =>
                 downloadBlob(
-                  buildReport(cards, status, events),
+                  buildReport(cards, status, events, external ? s.diff : 0),
                   "simulation-report.txt",
                   "text/plain",
                 )
@@ -874,7 +874,7 @@ function App() {
                 );
                 doc.setFontSize(9);
                 doc.text(
-                  doc.splitTextToSize(buildReport(cards, status, events), 180),
+                  doc.splitTextToSize(buildReport(cards, status, events, external ? s.diff : 0), 180),
                   14,
                   28,
                 );
