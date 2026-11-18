@@ -144,7 +144,7 @@ function App() {
     [cards, start, months, spend, cardSpendTotal, payment, cashBudget, startingCash, paydayDay, external, fee, s.diff],
   );
   const actualRepaymentTotal = useMemo(() => events.filter(event => event.type === "Direct Debit").reduce((sum, event) => sum + event.amount, 0), [events]);
-  const actualOneTimePayment = useMemo(() => events.filter(event => event.type === "One-time payment").reduce((sum, event) => sum + event.amount, 0), [events]);
+  const actualOneTimePayment = useMemo(() => events.filter(event => event.type === "Accounting adjustment").reduce((sum, event) => sum + event.amount, 0), [events]);
   const opts = { external: actualOneTimePayment, spend: cardSpendTotal || spend, payment: months > 0 ? actualRepaymentTotal / months : 0, fee, months };
   const status = useMemo(() => feasibility(cards, opts), [cards, actualOneTimePayment, actualRepaymentTotal, cardSpendTotal, spend, fee, months]);
   const selectedMonthEvents = useMemo(() => {
