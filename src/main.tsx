@@ -97,6 +97,14 @@ function App() {
       return offset === selectedCycleMonth - 1;
     });
   }, [events, start, selectedCycleMonth]);
+  const selectedMonthSummary = useMemo(() => cards.map(card => {
+    const cardEvents = selectedMonthEvents.filter((event: any) => event.destination === card.name || event.source === card.name);
+    const spending = cardEvents.filter((event: any) => event.type === "New spending" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
+    const repayments = cardEvents.filter((event: any) => event.type === "Direct Debit" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
+    const last = [...cardEvents].reverse().find((event: any) => event.destination === card.name && typeof event.cardAfter === "number");
+    const closing = last?.cardAfter ?? card.balance;
+    return { ...card, spending, repayments, closing, utilisation: card.limit ? closing / card.limit * 100 : 0 };
+  }), [cards, selectedMonthEvents]);
   const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
@@ -538,6 +546,8 @@ function App() {
             </div>
             {selectedMonthEvents.length > 16 && <p className="muted timeline-more">Showing first 16 events for this month. Full details remain in the ledger below.</p>}
           </section>
+          <h3>Monthly card snapshot</h3>
+          <table className="monthly-snapshot"><thead><tr><th>Card</th><th>Opening</th><th>Repayment</th><th>Spending</th><th>Closing</th><th>Utilisation</th><th>Status</th></tr></thead><tbody>{selectedMonthSummary.map(card => <tr key={card.name}><td><b>{card.name}</b><small>{card.provider}</small></td><td>{formatGBP(card.balance)}</td><td>{formatGBP(card.repayments)}</td><td>{formatGBP(card.spending)}</td><td>{formatGBP(card.closing)}</td><td>{card.utilisation.toFixed(1)}%</td><td><span className={card.utilisation > 50 ? "pill red" : "pill green"}>{card.utilisation > 50 ? "Above 50%" : "Within target"}</span></td></tr>)}</tbody></table>
           <h3>Chronological ledger</h3>
           <table>
             <thead>
