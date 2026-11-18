@@ -20,6 +20,8 @@ export type Event = {
   after: number;
   utilBefore: number;
   utilAfter: number;
+  cashBefore?: number;
+  cashAfter?: number;
 };
 export const initialCards: Card[] = [
   ["Capital One A", "Capital One", 2250, 1100, 28, 20],
@@ -155,15 +157,19 @@ export function simulateCycle(
     payment: number;
     external: number;
     fee: number;
+    startingCash?: number;
+    monthlyCashInflow?: number;
+    incomeDay?: number;
   },
 ) {
-  // Card-level ledger: every month starts from the previous month's closing balances.
-  // Transfers and repayments are recorded as ledger events; only repayments/adjustments
-  // reduce total debt. With no external cash, cycling cannot reduce total debt.
+  // All card repayments must be funded from the simulated cash account.
+  // Internal transfers conserve total debt; cash income and repayments are
+  // represented as separate, auditable ledger events.
   const events: Event[] = [];
   const state = new Map(cards.map((c) => [c.name, { ...c }]));
   const limit = summary(cards).limit;
   let total = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+  let cashBalance = Math.max(0, o.startingCash || 0);
 
   const emit = (
     date: string,
@@ -175,12 +181,15 @@ export function simulateCycle(
     cardName: string | undefined,
     delta: number,
     totalDelta: number = delta,
+    cashDelta: number = 0,
   ) => {
     const before = total;
+    const cashBefore = cashBalance;
     const card = cardName ? state.get(cardName) : undefined;
     const cardBefore = card?.balance;
     if (card) card.balance = Math.max(0, card.balance + delta);
     total = Math.max(0, total + totalDelta);
+    cashBalance = Math.max(0, cashBalance + cashDelta);
     events.push({
       date,
       type,
@@ -190,14 +199,16 @@ export function simulateCycle(
       reason,
       before,
       after: total,
-      utilBefore: (before / limit) * 100,
-      utilAfter: (total / limit) * 100,
+      utilBefore: limit ? (before / limit) * 100 : 0,
+      utilAfter: limit ? (total / limit) * 100 : 0,
+      cashBefore,
+      cashAfter: cashBalance,
       ...(card
         ? {
             cardBefore,
             cardAfter: card.balance,
-            cardUtilBefore: ((cardBefore || 0) / card.limit) * 100,
-            cardUtilAfter: (card.balance / card.limit) * 100,
+            cardUtilBefore: card.limit ? ((cardBefore || 0) / card.limit) * 100 : 0,
+            cardUtilAfter: card.limit ? (card.balance / card.limit) * 100 : 0,
           }
         : {}),
     } as Event);
@@ -208,21 +219,27 @@ export function simulateCycle(
     base.setUTCMonth(base.getUTCMonth() + month);
     const year = base.getUTCFullYear();
     const monthIndex = base.getUTCMonth();
+    const monthLastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
     const iso = (day: number) =>
-      new Date(Date.UTC(year, monthIndex, Math.min(day, new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate())))
+      new Date(Date.UTC(year, monthIndex, Math.min(day, monthLastDay)))
         .toISOString()
         .slice(0, 10);
 
-    const scheduled: Array<{ date: string; kind: string; card?: Card; }> = [];
+    type Scheduled = { date: string; kind: "statement" | "dd" | "income" | "oneoff"; card?: Card };
+    const scheduled: Scheduled[] = [];
     for (const card of state.values()) {
       if (card.statement) scheduled.push({ date: iso(card.statement), kind: "statement", card });
       if (card.dd) scheduled.push({ date: iso(card.dd), kind: "dd", card });
     }
-    scheduled.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "statement" ? -1 : 1));
+    if (o.monthlyCashInflow && o.monthlyCashInflow > 0) {
+      scheduled.push({ date: iso(Math.min(28, Math.max(1, o.incomeDay || 1))), kind: "income" });
+    }
+    if (month === 0 && o.external > 0) scheduled.push({ date: iso(1), kind: "oneoff" });
+    const priority: Record<Scheduled["kind"], number> = { dd: 0, oneoff: 1, statement: 2, income: 3 };
+    scheduled.sort((a, b) => a.date.localeCompare(b.date) || priority[a.kind] - priority[b.kind]);
     let paymentRemaining = Math.max(0, o.payment);
 
-    // Spend is allocated to the cards with the most 50% headroom first.
-    // This makes the 50% rule visible and flags any spend that cannot fit.
+    // Spending is recorded on day 1 as the current model's timing assumption.
     if (o.spend > 0) {
       let remaining = o.spend;
       const ordered = Array.from(state.values()).sort(
@@ -257,15 +274,48 @@ export function simulateCycle(
     }
 
     for (const item of scheduled) {
-      if (item.kind === "statement") {
+      if (item.kind === "income") {
+        emit(item.date, "Cash inflow", "External income", "Simulated bank account", o.monthlyCashInflow || 0,
+          "Monthly cash added to the payment account; unused cash carries forward", undefined, 0, 0, o.monthlyCashInflow || 0);
+      } else if (item.kind === "statement") {
         emit(item.date, "Statement generation", item.card!.name, "Ledger", 0, "Simulated card statement", undefined, 0);
-      } else if (o.payment > 0) {
-        const balanceTotal = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+      } else if (item.kind === "oneoff") {
+        const requested = Math.max(0, o.external);
+        const paid = Math.min(requested, cashBalance, total);
+        if (paid > 0) {
+          emit(item.date, "One-time payment", "Simulated bank account", "Card balances", paid,
+            "One-time payment limited by cash available", undefined, 0, -paid, -paid);
+          const balances = Array.from(state.values());
+          const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
+          let remaining = paid;
+          balances.forEach((card, index) => {
+            if (remaining <= 0 || balanceTotal <= 0) return;
+            const amount = index === balances.length - 1 ? remaining : Math.min(card.balance, paid * (card.balance / balanceTotal));
+            if (amount > 0) {
+              emit(item.date, "Payment allocation", "One-time payment", card.name, amount,
+                "Card-level allocation of the funded one-time payment", card.name, -amount, 0);
+              remaining -= amount;
+            }
+          });
+        }
+        if (requested > paid) {
+          emit(item.date, "Unfunded one-time payment", "Simulated bank account", "Card balances", requested - paid,
+            "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
+        }
+      } else if (item.kind === "dd" && paymentRemaining > 0) {
         const card = item.card!;
-        const amount = Math.min(card.balance, paymentRemaining, balanceTotal > 0 ? paymentRemaining * (card.balance / balanceTotal) : 0);
-        if (amount > 0) {
-          emit(item.date, "Direct Debit", "Simulated bank account", card.name, amount, "Proportional simulated repayment", card.name, -amount);
-          paymentRemaining -= amount;
+        const balanceTotal = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+        const requested = Math.min(card.balance, balanceTotal > 0 ? paymentRemaining * (card.balance / balanceTotal) : 0);
+        const paid = Math.min(requested, cashBalance);
+        if (paid > 0) {
+          emit(item.date, "Direct Debit", "Simulated bank account", card.name, paid,
+            "Cash-funded simulated repayment", card.name, -paid, -paid, -paid);
+          paymentRemaining -= paid;
+        }
+        if (requested > paid) {
+          emit(item.date, "Unfunded Direct Debit", "Simulated bank account", card.name, requested - paid,
+            "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
+          paymentRemaining -= requested - paid;
         }
       }
     }
@@ -274,24 +324,9 @@ export function simulateCycle(
       const fee = (o.spend * o.fee) / 100;
       emit(iso(1), "Fee", "Transfer facility", "Cards", fee, "Transfer fee", undefined, fee);
     }
-    if (month === 0 && o.external > 0) {
-      const balances = Array.from(state.values());
-      const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
-      const appliedAdjustment = Math.min(o.external, balanceTotal);
-      emit(iso(1), "Accounting adjustment", "External payment / loss", "Ledger", appliedAdjustment, "One-time accounting adjustment", undefined, -appliedAdjustment);
-      let adjustmentRemaining = appliedAdjustment;
-      balances.forEach((card, index) => {
-        if (adjustmentRemaining <= 0 || balanceTotal <= 0) return;
-        const amount = index === balances.length - 1
-          ? adjustmentRemaining
-          : Math.min(card.balance, appliedAdjustment * (card.balance / balanceTotal));
-        if (amount > 0) {
-          emit(iso(1), "Adjustment allocation", "Accounting adjustment", card.name, amount, "Card-level allocation of one-time adjustment", card.name, -amount, 0);
-          adjustmentRemaining -= amount;
-        }
-      });
-    }
-    emit(iso(new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()), "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", undefined, 0);
+    emit(iso(monthLastDay), "Cash balance", "Simulated bank account", "Next month", cashBalance,
+      "Closing cash carries forward to the next month", undefined, 0);
+    emit(iso(monthLastDay), "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", undefined, 0);
   }
   return events.sort((a, b) => a.date.localeCompare(b.date));
 }
