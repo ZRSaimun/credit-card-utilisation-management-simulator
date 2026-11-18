@@ -237,8 +237,6 @@ export function simulateCycle(
     if (month === 0 && o.external > 0) scheduled.push({ date: iso(1), kind: "oneoff" });
     const priority: Record<Scheduled["kind"], number> = { dd: 0, oneoff: 1, statement: 2, income: 3 };
     scheduled.sort((a, b) => a.date.localeCompare(b.date) || priority[a.kind] - priority[b.kind]);
-    let paymentRemaining = Math.max(0, o.payment);
-
     // Spending is recorded on day 1 as the current model's timing assumption.
     if (o.spend > 0) {
       let remaining = o.spend;
@@ -273,6 +271,13 @@ export function simulateCycle(
       }
     }
 
+    const paymentCards = Array.from(state.values()).filter(card => card.dd);
+    const paymentBalanceTotal = paymentCards.reduce((sum, card) => sum + card.balance, 0);
+    const repaymentPlan = new Map(paymentCards.map(card => [
+      card.name,
+      Math.min(card.balance, paymentBalanceTotal > 0 ? Math.max(0, o.payment) * (card.balance / paymentBalanceTotal) : 0),
+    ]));
+
     for (const item of scheduled) {
       if (item.kind === "income") {
         emit(item.date, "Cash inflow", "External income", "Simulated bank account", o.monthlyCashInflow || 0,
@@ -302,20 +307,17 @@ export function simulateCycle(
           emit(item.date, "Unfunded one-time payment", "Simulated bank account", "Card balances", requested - paid,
             "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
         }
-      } else if (item.kind === "dd" && paymentRemaining > 0) {
+      } else if (item.kind === "dd") {
         const card = item.card!;
-        const balanceTotal = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
-        const requested = Math.min(card.balance, balanceTotal > 0 ? paymentRemaining * (card.balance / balanceTotal) : 0);
+        const requested = Math.min(card.balance, repaymentPlan.get(card.name) || 0);
         const paid = Math.min(requested, cashBalance);
         if (paid > 0) {
           emit(item.date, "Direct Debit", "Simulated bank account", card.name, paid,
             "Cash-funded simulated repayment", card.name, -paid, -paid, -paid);
-          paymentRemaining -= paid;
         }
         if (requested > paid) {
           emit(item.date, "Unfunded Direct Debit", "Simulated bank account", card.name, requested - paid,
             "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
-          paymentRemaining -= requested - paid;
         }
       }
     }
