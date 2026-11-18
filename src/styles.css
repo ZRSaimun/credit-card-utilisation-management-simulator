@@ -79,3 +79,25 @@ nav{position:sticky;top:10px;z-index:10;background:#f3f6f8cc;backdrop-filter:blu
 .dark-mode .cloud-account button,.dark-mode .cloud-save-row button{background:#55d5a6;color:#08251e;border-color:#55d5a6}
 .dark-mode .cloud-privacy-note{border-color:#38515d}
 @media(max-width:560px){.cloud-sync .controls{grid-template-columns:1fr}.cloud-sync{padding:16px 12px}.cloud-account{align-items:flex-start;flex-direction:column}.cloud-account b{flex:auto}.cloud-save-row button{flex:1}}
+
+.audit-panel{margin-top:18px;border-color:#d7e8ed;background:linear-gradient(135deg,#fff 0%,#f7fbfc 100%)}
+.audit-panel>.row{margin-bottom:8px}
+.audit-panel>.muted{max-width:900px;line-height:1.6}
+.audit-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}
+.audit-stat{padding:14px;border:1px solid #dce7eb;border-radius:12px;background:#fff}
+.audit-stat span{display:block;color:#637283;font-size:.68rem;font-weight:700;line-height:1.4;text-transform:uppercase;letter-spacing:.03em}
+.audit-stat b{display:block;margin-top:8px;font-size:1.25rem;letter-spacing:-.03em}
+.audit-stat.audit-danger{border-color:#efc2be;background:#fff0ef}.audit-stat.audit-danger b{color:#b53f3c}
+.audit-stat.audit-warning{border-color:#f0d6a4;background:#fff9ee}.audit-stat.audit-warning b{color:#a26a12}
+.audit-stat.audit-safe{border-color:#b8e8d0;background:#eaf9f1}.audit-stat.audit-safe b{color:#16815d}
+.audit-actions{padding:15px 17px;border-left:4px solid #20a879;border-radius:10px;background:#effaf4;color:#24443a}
+.audit-actions h3{margin:0 0 8px;color:#31584b;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em}
+.audit-actions ol{margin:0;padding-left:20px}.audit-actions li{padding:4px 0;font-size:.82rem;line-height:1.5}
+.dark-mode .audit-panel{background:linear-gradient(135deg,#10241f,#132b30);border-color:#23795e}
+.dark-mode .audit-stat{background:#152331;border-color:#38515d}.dark-mode .audit-stat span{color:#afc0c6}.dark-mode .audit-stat b{color:#e3edf0}
+.dark-mode .audit-stat.audit-danger{background:#321f23;border-color:#754047}.dark-mode .audit-stat.audit-danger b{color:#ff9f9a}
+.dark-mode .audit-stat.audit-warning{background:#302719;border-color:#73582b}.dark-mode .audit-stat.audit-warning b{color:#f4c368}
+.dark-mode .audit-stat.audit-safe{background:#12342c;border-color:#23795e}.dark-mode .audit-stat.audit-safe b{color:#8ae7bd}
+.dark-mode .audit-actions{background:#12342c;color:#c9f2df;border-left-color:#55d5a6}.dark-mode .audit-actions h3{color:#8ae7bd}
+@media(max-width:980px){.audit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.audit-stat b{font-size:1.05rem}}

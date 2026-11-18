@@ -192,6 +192,20 @@ function App() {
     });
   }, [events, start, selectedCycleMonth]);
   const selectedMonthCashBalance = selectedMonthEvents.filter(event => event.type === "Cash balance").at(-1)?.amount ?? (selectedCycleMonth === 1 ? startingCash : 0);
+  const auditChecks = useMemo(() => {
+    const missingDates = cards.filter(card => !card.statement || !card.dd);
+    const overLimit = cards.filter(card => card.balance > card.limit);
+    const highUtilisation = cards.filter(card => card.limit > 0 && card.balance / card.limit >= 0.8);
+    const fundingShortfall = Math.max(0, payment * months - actualRepaymentTotal);
+    const lowestCash = events.reduce((lowest, event: any) => Math.min(lowest, typeof event.cashAfter === "number" ? event.cashAfter : lowest), startingCash);
+    const actions: string[] = [];
+    if (s.diff > 0) actions.push(`Repay ${formatGBP(s.diff)} in the model to reach 50% overall utilisation.`);
+    if (missingDates.length) actions.push(`Add statement and Direct Debit dates for ${missingDates.length} card${missingDates.length === 1 ? "" : "s"}.`);
+    if (fundingShortfall > 0) actions.push(`Increase modeled cash funding by ${formatGBP(fundingShortfall)} across the selected cycle.`);
+    if (overLimit.length) actions.push(`Review ${overLimit.length} over-limit card${overLimit.length === 1 ? "" : "s"} before running another cycle.`);
+    if (!actions.length) actions.push("No priority exceptions found under the current assumptions.");
+    return { missingDates, overLimit, highUtilisation, fundingShortfall, lowestCash, actions };
+  }, [cards, events, months, payment, actualRepaymentTotal, startingCash, s.diff]);
   const selectedMonthSummary = useMemo(() => {
     const monthStart = new Date(start + "T00:00:00Z");
     monthStart.setUTCDate(1);
@@ -641,6 +655,18 @@ function App() {
                 </article>;
               })}
             </div>
+          </section>
+          <section className="panel audit-panel">
+            <div className="row"><div><span className="eyebrow">DECISION SUPPORT</span><h2>Audit checks and priority actions</h2></div><span className={auditChecks.actions.length === 1 && auditChecks.actions[0].startsWith("No priority") ? "pill green" : "pill red"}>{auditChecks.actions.length === 1 && auditChecks.actions[0].startsWith("No priority") ? "CLEAR" : "REVIEW"}</span></div>
+            <p className="muted">These checks are derived from the card inputs and the current cycle assumptions. They are warnings for the simulation, not bank instructions.</p>
+            <div className="audit-grid">
+              <div className={auditChecks.overLimit.length ? "audit-stat audit-danger" : "audit-stat"}><span>Over-limit cards</span><b>{auditChecks.overLimit.length}</b></div>
+              <div className={auditChecks.highUtilisation.length ? "audit-stat audit-warning" : "audit-stat"}><span>At least 80% used</span><b>{auditChecks.highUtilisation.length}</b></div>
+              <div className={auditChecks.missingDates.length ? "audit-stat audit-warning" : "audit-stat"}><span>Missing dates</span><b>{auditChecks.missingDates.length}</b></div>
+              <div className={auditChecks.fundingShortfall ? "audit-stat audit-danger" : "audit-stat audit-safe"}><span>Funding shortfall</span><b>{formatGBP(auditChecks.fundingShortfall)}</b></div>
+              <div className={auditChecks.lowestCash < 0.005 ? "audit-stat audit-warning" : "audit-stat audit-safe"}><span>Lowest modeled cash</span><b>{formatGBP(auditChecks.lowestCash)}</b></div>
+            </div>
+            <div className="audit-actions"><h3>Recommended next actions</h3><ol>{auditChecks.actions.map(action => <li key={action}>{action}</li>)}</ol></div>
           </section>
           <section className="panel">
             <h2>Validation</h2>
