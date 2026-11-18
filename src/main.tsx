@@ -287,6 +287,23 @@ function App() {
             <div className="row"><div><h2>Card utilisation map</h2><p className="muted">Each bar is compared with the 50% target.</p></div><span className="pill green">LIVE MODEL</span></div>
             <ResponsiveContainer width="100%" height={300}><BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" stroke="#e6edef" vertical={false}/><XAxis dataKey="name" angle={-35} textAnchor="end" interval={0} height={65} tick={{fontSize:11}}/><YAxis unit="%" tick={{fontSize:11}}/><Tooltip formatter={(value)=>[`${value}%`, "Utilisation"]}/><Bar dataKey="utilisation" fill="#20a879" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer>
           </section>
+          <section className="panel health-panel">
+            <div className="row"><div><h2>Card health monitor</h2><p className="muted">Every card compared with its individual 50% threshold.</p></div><span className="pill green">CARD LEVEL</span></div>
+            <div className="health-grid">
+              {cards.map((card) => {
+                const utilisation = (card.balance / card.limit) * 100;
+                const target = card.limit * 0.5;
+                const over = Math.max(0, card.balance - target);
+                const state = utilisation > 50 ? "Above target" : utilisation > 35 ? "Watch" : "Within target";
+                return <article className={"health-card " + (utilisation > 50 ? "health-danger" : utilisation > 35 ? "health-watch" : "health-safe")} key={card.name}>
+                  <div className="health-card-top"><div><b>{card.name}</b><small>{card.provider}</small></div><span className="health-status">{state}</span></div>
+                  <div className="health-values"><strong>{utilisation.toFixed(1)}%</strong><span>{formatGBP(card.balance)} / {formatGBP(card.limit)}</span></div>
+                  <div className="health-track"><i style={{width: Math.min(utilisation,100) + "%"}}></i><em style={{left:"50%"}}></em></div>
+                  <div className="health-foot"><span>50% target: {formatGBP(target)}</span><span>{over > 0 ? formatGBP(over) + " over" : formatGBP(card.limit-card.balance) + " available"}</span></div>
+                </article>;
+              })}
+            </div>
+          </section>
           <section className="panel">
             <h2>Validation</h2>
             <p>
