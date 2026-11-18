@@ -613,8 +613,7 @@ function App() {
             </tbody>
           </table>
           <div className="callout">
-            £1,821 is a separate external-payment/accounting-adjustment
-            requirement, not money created by cycling.
+            At least {formatGBP(s.diff)} must be repaid to bring total balances to the overall 50% target. Transfers only move debt between cards.
           </div>
         </section>
       )}
@@ -823,9 +822,9 @@ function App() {
                   "Transfers conserve debt",
                 ],
                 [
-                  "One-time £1,821 adjustment",
-                  s.balance - 1821,
-                  1821,
+                  "One-time payment to 50% overall",
+                  s.target,
+                  s.diff,
                   "Separate adjustment",
                 ],
               ].map((r) => (
