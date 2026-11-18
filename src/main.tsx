@@ -93,20 +93,34 @@ function App() {
   );
   const selectedMonthEvents = useMemo(() => {
     const base = new Date(start + "T00:00:00Z");
+    base.setUTCDate(1);
+    base.setUTCMonth(base.getUTCMonth() + selectedCycleMonth - 1);
+    const year = base.getUTCFullYear();
+    const month = base.getUTCMonth();
     return events.filter((event: any) => {
-      const d = new Date(event.date + "T00:00:00Z");
-      const offset = (d.getUTCFullYear() - base.getUTCFullYear()) * 12 + d.getUTCMonth() - base.getUTCMonth();
-      return offset === selectedCycleMonth - 1;
+      const date = new Date(event.date + "T00:00:00Z");
+      return date.getUTCFullYear() === year && date.getUTCMonth() === month;
     });
   }, [events, start, selectedCycleMonth]);
-  const selectedMonthSummary = useMemo(() => cards.map(card => {
-    const cardEvents: any[] = selectedMonthEvents.filter((event: any) => event.destination === card.name || event.source === card.name);
-    const spending = cardEvents.filter((event: any) => event.type === "New spending" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
-    const repayments = cardEvents.filter((event: any) => event.type === "Direct Debit" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
-    const last = [...cardEvents].reverse().find((event: any) => event.destination === card.name && typeof event.cardAfter === "number");
-    const closing = last?.cardAfter ?? card.balance;
-    return { ...card, spending, repayments, closing, utilisation: card.limit ? closing / card.limit * 100 : 0 };
-  }), [cards, selectedMonthEvents]);
+  const selectedMonthSummary = useMemo(() => {
+    const monthStart = new Date(start + "T00:00:00Z");
+    monthStart.setUTCDate(1);
+    monthStart.setUTCMonth(monthStart.getUTCMonth() + selectedCycleMonth - 1);
+    const monthStartDate = monthStart.toISOString().slice(0, 10);
+    const priorEvents: any[] = events.filter((event: any) => event.date < monthStartDate);
+    return cards.map(card => {
+      let opening = card.balance;
+      priorEvents.forEach((event: any) => {
+        if ((event.destination === card.name || event.source === card.name) && typeof event.cardAfter === "number") opening = event.cardAfter;
+      });
+      const cardEvents: any[] = selectedMonthEvents.filter((event: any) => event.destination === card.name || event.source === card.name);
+      const spending = cardEvents.filter((event: any) => event.type === "New spending" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
+      const repayments = cardEvents.filter((event: any) => event.type === "Direct Debit" && event.destination === card.name).reduce((sum: number, event: any) => sum + event.amount, 0);
+      const last = [...cardEvents].reverse().find((event: any) => typeof event.cardAfter === "number" && (event.destination === card.name || event.source === card.name));
+      const closing = last?.cardAfter ?? opening;
+      return { ...card, opening, spending, repayments, closing, utilisation: card.limit ? closing / card.limit * 100 : 0 };
+    });
+  }, [cards, events, start, selectedCycleMonth, selectedMonthEvents]);
   const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
@@ -564,7 +578,7 @@ function App() {
             {selectedMonthEvents.length > 16 && <p className="muted timeline-more">Showing first 16 events for this month. Full details remain in the ledger below.</p>}
           </section>
           <h3>Monthly card snapshot</h3>
-          <table className="monthly-snapshot"><thead><tr><th>Card</th><th>Opening</th><th>Repayment</th><th>Spending</th><th>Closing</th><th>Utilisation</th><th>Status</th></tr></thead><tbody>{selectedMonthSummary.map(card => <tr key={card.name}><td><b>{card.name}</b><small>{card.provider}</small></td><td>{formatGBP(card.balance)}</td><td>{formatGBP(card.repayments)}</td><td>{formatGBP(card.spending)}</td><td>{formatGBP(card.closing)}</td><td>{card.utilisation.toFixed(1)}%</td><td><span className={card.utilisation > 50 ? "pill red" : "pill green"}>{card.utilisation > 50 ? "Above 50%" : "Within target"}</span></td></tr>)}</tbody></table>
+          <table className="monthly-snapshot"><thead><tr><th>Card</th><th>Opening</th><th>Repayment</th><th>Spending</th><th>Closing</th><th>Utilisation</th><th>Status</th></tr></thead><tbody>{selectedMonthSummary.map(card => <tr key={card.name}><td><b>{card.name}</b><small>{card.provider}</small></td><td>{formatGBP(card.opening)}</td><td>{formatGBP(card.repayments)}</td><td>{formatGBP(card.spending)}</td><td>{formatGBP(card.closing)}</td><td>{card.utilisation.toFixed(1)}%</td><td><span className={card.utilisation > 50 ? "pill red" : "pill green"}>{card.utilisation > 50 ? "Above 50%" : "Within target"}</span></td></tr>)}</tbody></table>
           <h3>Chronological ledger</h3>
           <table>
             <thead>
