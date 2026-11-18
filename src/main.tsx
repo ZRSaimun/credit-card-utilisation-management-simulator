@@ -89,7 +89,15 @@ function App() {
       }),
     [cards, start, months, spend, payment, external, fee],
   );
-  const selectedMonthEvents = useMemo(() => {\n    const base = new Date(start + "T00:00:00Z");\n    return events.filter((event: any) => {\n      const d = new Date(event.date + "T00:00:00Z");\n      const offset = (d.getUTCFullYear() - base.getUTCFullYear()) * 12 + d.getUTCMonth() - base.getUTCMonth();\n      return offset === selectedCycleMonth - 1;\n    });\n  }, [events, start, selectedCycleMonth]);\n  const save = (c: Card) => {
+  const selectedMonthEvents = useMemo(() => {
+    const base = new Date(start + "T00:00:00Z");
+    return events.filter((event: any) => {
+      const d = new Date(event.date + "T00:00:00Z");
+      const offset = (d.getUTCFullYear() - base.getUTCFullYear()) * 12 + d.getUTCMonth() - base.getUTCMonth();
+      return offset === selectedCycleMonth - 1;
+    });
+  }, [events, start, selectedCycleMonth]);
+  const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
       setCards((cs) => cs.map((x) => (x === edit ? c : x)));
@@ -501,7 +509,8 @@ function App() {
               />
             </label>
           </div>
-          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div></div>\n          <div className="card-spend-grid">
+          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div></div>
+          <div className="card-spend-grid">
             <h3>New spending by card / month</h3>
             <div className="controls">{cards.map(c=><label key={c.name}>{c.name}<input type="number" min="0" value={spendByCard[c.name] ?? 0} onChange={e=>setSpendByCard({...spendByCard,[c.name]:Math.max(0,+e.target.value)})}/></label>)}</div>
             <p className="muted">Total card-level spending: <b>{formatGBP(cardSpendTotal)}</b>. If all values are zero, the general spending input above is used.</p>
