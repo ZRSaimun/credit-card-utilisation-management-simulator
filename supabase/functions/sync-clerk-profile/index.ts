@@ -12,6 +12,9 @@ Deno.serve(async (req) => {
     if (!id) throw new Error("Could not provision a Supabase profile");
     const { error } = await supabase.from("profiles").upsert({ id, clerk_user_id: clerkUserId, email, full_name: body.full_name || "" }, { onConflict: "id" });
     if (error) throw error;
+    if (!existing && Deno.env.get("RESEND_API_KEY")) {
+      await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: Deno.env.get("RESEND_FROM_EMAIL") || "Credit Card Simulator <onboarding@resend.dev>", to: [email], subject: "Welcome to Credit Card Simulator!", html: `<h1>Welcome${body.full_name ? `, ${body.full_name}` : ""}!</h1><p>Explore card utilisation and repayment scenarios safely.</p><p><a href="${Deno.env.get("APP_SITE_URL") || "https://zrsaimun.github.io/credit-card-utilisation-management-simulator/"}">Open the simulator</a></p>` }) });
+    }
     return new Response(JSON.stringify({ id, clerk_user_id: clerkUserId }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) { return new Response(JSON.stringify({ error: String((error as Error).message || error) }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } }); }
 });
