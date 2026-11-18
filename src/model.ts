@@ -329,8 +329,8 @@ export function downloadBlob(
   a.click();
   URL.revokeObjectURL(a.href);
 }
-export function buildReport(cards: Card[], status: any, events: Event[] = []) {
+export function buildReport(cards: Card[], status: any, events: Event[] = [], adjustment = 0) {
   const s = summary(cards);
-  return `CREDIT CARD UTILISATION MANAGEMENT SIMULATOR\nSIMULATION ONLY\n\nEXECUTIVE SUMMARY\nTotal limit: ${formatGBP(s.limit)}\nTotal balance: ${formatGBP(s.balance)}\nUtilisation: ${s.util}%\n50% target: ${formatGBP(s.target)}\nDifference: ${formatGBP(s.diff)}\nCards above 50%: ${s.above}\n\nFEASIBILITY\n${status.label}\n${status.detail}\n\nASSUMPTIONS\nTransfer fee default: 0%\nExternal payment during recurring cycle: £0\nOne-time accounting adjustment: £1,821, shown separately\nMissing dates are never guessed.\n\nACCOUNTING RECONCILIATION\nOpening debt + new spending + fees - simulated repayments - external payments - approved adjustments = closing debt.\n\nEVENTS\n${events.map((e) => `${e.date} | ${e.type} | ${e.amount} | ${e.reason}`).join("\n")}`;
+  return `CREDIT CARD UTILISATION MANAGEMENT SIMULATOR\nSIMULATION ONLY\n\nEXECUTIVE SUMMARY\nTotal limit: ${formatGBP(s.limit)}\nTotal balance: ${formatGBP(s.balance)}\nUtilisation: ${s.util}%\n50% target: ${formatGBP(s.target)}\nDifference: ${formatGBP(s.diff)}\nCards above 50%: ${s.above}\n\nFEASIBILITY\n${status.label}\n${status.detail}\n\nASSUMPTIONS\nTransfer fee default: 0%\nExternal payment during recurring cycle: £0\nCurrent 50% gap: ${formatGBP(s.diff)}\nOne-time adjustment modelled: ${formatGBP(adjustment)}\nMissing dates are never guessed.\n\nACCOUNTING RECONCILIATION\nOpening debt + new spending + fees - simulated repayments - external payments - approved adjustments = closing debt.\n\nEVENTS\n${events.map((e) => `${e.date} | ${e.type} | ${e.amount} | ${e.reason}`).join("\n")}`;
 }
 
