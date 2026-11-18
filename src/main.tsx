@@ -112,6 +112,14 @@ function App() {
     } else setCards((cs) => [...cs, c]);
     setEdit(null);
   };
+  const exportSelectedMonth = () => {
+    const rows = [["Month", "Card", "Opening", "Repayment", "Spending", "Closing", "Utilisation", "Status"]];
+    selectedMonthSummary.forEach(card => rows.push(["Month " + selectedCycleMonth, card.name, card.balance.toFixed(2), card.repayments.toFixed(2), card.spending.toFixed(2), card.closing.toFixed(2), (card.utilisation / 100).toFixed(4), card.utilisation > 50 ? "Above 50%" : "Within target"]));
+    rows.push([]);
+    rows.push(["Date", "Event", "Source", "Destination", "Amount", "Reason"]);
+    selectedMonthEvents.forEach((event: any) => rows.push([event.date, event.type, event.source, event.destination, event.amount.toFixed(2), event.reason]));
+    downloadBlob(rows.map(row => row.map(value => '"' + String(value ?? "").replaceAll('"', '""') + '"').join(",")).join("\n"), "monthly-plan-" + selectedCycleMonth + ".csv", "text/csv");
+  };
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
     const add = (n, data) =>
@@ -517,7 +525,7 @@ function App() {
               />
             </label>
           </div>
-          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div></div>
+          <div className="monthly-planner-toolbar"><div><b>Monthly planner view</b><p className="muted">Inspect one simulated month at a time.</p></div><label>View month<select value={selectedCycleMonth} onChange={e=>setSelectedCycleMonth(Math.max(1,Math.min(months,+e.target.value)))}>{Array.from({length:Math.max(1,months)},(_,i)=><option key={i+1} value={i+1}>Month {i+1}</option>)}</select></label><div className="planner-stat"><span>Events</span><b>{selectedMonthEvents.length}</b></div><div className="planner-stat"><span>Amount moved</span><b>{formatGBP(selectedMonthEvents.reduce((sum,e)=>sum+e.amount,0))}</b></div><button className="planner-export" onClick={exportSelectedMonth}>Export month CSV</button></div>
           <div className="card-spend-grid">
             <h3>New spending by card / month</h3>
             <div className="controls">{cards.map(c=><label key={c.name}>{c.name}<input type="number" min="0" value={spendByCard[c.name] ?? 0} onChange={e=>setSpendByCard({...spendByCard,[c.name]:Math.max(0,+e.target.value)})}/></label>)}</div>
