@@ -1,6 +1,11 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ClerkProvider } from "@clerk/clerk-react";
 import "./styles.css";
+import { AuthButton } from "./components/AuthButton";
+import { ClerkSessionBridge } from "./components/ClerkSessionBridge";
+import { UpgradeButton } from "./components/UpgradeButton";
+import { track } from "./lib/posthog";
 import {
   Card,
   initialCards,
@@ -17,6 +22,7 @@ import {
 const FinancialMathLab = lazy(() => import("./FinancialMathLab"));
 const UtilisationChart = lazy(() => import("./UtilisationChart"));
 const ScenarioChart = lazy(() => import("./ScenarioChart"));
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 import { CloudScenarioRow, CloudScenarioVersionRow, CloudSession, deleteCloudScenario, getCloudSession, listCloudScenarioVersions, listCloudScenarios, saveCloudScenario, signInCloudUser, signOutCloudUser, signUpCloudUser, subscribeCloudAuth } from "./supabase";
 type ScenarioSettings = {
   external: boolean;
@@ -257,6 +263,7 @@ function App() {
       settings: { external, spend, spendByCard: { ...spendByCard }, payment, cashBudget, startingCash, paydayDay, fee, months, start, selectedCycleMonth },
     };
     if (storeSavedScenarios([snapshot, ...savedScenarios])) {
+      track("simulation_saved", { storage: "browser", card_count: cards.length });
       setScenarioMessage("Saved “" + name + "” in this browser.");
     }
   };
@@ -441,7 +448,7 @@ function App() {
     const normalized = { ...c, name, provider };
     if (edit?.name) {
       setCards((cs) => cs.map((x) => (x === edit ? normalized : x)));
-    } else setCards((cs) => [...cs, normalized]);
+    } else { setCards((cs) => [...cs, normalized]); track("card_added", { provider: normalized.provider }); }
     setEdit(null);
   };
   const exportSelectedMonth = () => {
@@ -552,7 +559,7 @@ function App() {
             Educational model · every event is simulated
           </p>
         </div>
-        <div className="header-actions"><button className="theme-toggle" onClick={()=>setDarkMode(v=>!v)} aria-label="Toggle colour theme">{darkMode ? "☀ Light" : "◐ Dark"}</button><button className="theme-toggle" onClick={()=>setPresentationMode(v=>!v)}>{presentationMode ? "Exit presentation" : "Presentation mode"}</button><span className="badge">SIMULATION ONLY</span></div>
+        <div className="header-actions"><button className="theme-toggle" onClick={()=>setDarkMode(v=>!v)} aria-label="Toggle colour theme">{darkMode ? "☀ Light" : "◐ Dark"}</button><button className="theme-toggle" onClick={()=>{setPresentationMode(v=>!v);track("simulation_started", {mode: "presentation"});}}>{presentationMode ? "Exit presentation" : "Presentation mode"}</button>{clerkPublishableKey && <><AuthButton /><UpgradeButton /></>}<span className="badge">SIMULATION ONLY</span></div>
       </header>
       {!presentationMode && <nav aria-label="Simulator sections">
         {[
@@ -583,7 +590,7 @@ function App() {
               <h2>Know the position before the next cycle starts.</h2>
               <p>Track utilisation, repayment pressure and the five-month simulated ledger from one clear view.</p>
               <div className="hero-actions">
-                <button className="hero-primary" onClick={() => setTab("Monthly Cycle")}>Open monthly cycle</button>
+                <button className="hero-primary" onClick={() => { setTab("Monthly Cycle"); track("simulation_started", {source: "dashboard"}); }}>Open monthly cycle</button>
                 <button className="hero-secondary" onClick={() => setPresentationMode(true)}>Start presentation</button>
               </div>
             </div>
@@ -1184,5 +1191,6 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<AppErrorBoundary><App /></AppErrorBoundary>);
+const app = <AppErrorBoundary><App /></AppErrorBoundary>;
+createRoot(document.getElementById("root")!).render(clerkPublishableKey ? <ClerkProvider publishableKey={clerkPublishableKey}><ClerkSessionBridge />{app}</ClerkProvider> : app);
 

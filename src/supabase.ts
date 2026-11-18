@@ -1,16 +1,7 @@
-import { createClient, type Session } from "@supabase/supabase-js";
+import { type Session } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabase";
 
-const PROJECT_URL = "https://dcpacwqhhyaslxstxrmp.supabase.co";
-const PUBLISHABLE_KEY = "sb_publishable_e_WnqNZj-GGz27atg52EkQ_annJQ8WI";
-
-export const supabase = createClient(PROJECT_URL, PUBLISHABLE_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: "implicit",
-  },
-});
+export { supabase } from "./lib/supabase";
 
 export type CloudSession = Session;
 

@@ -1,0 +1,2 @@
+export const welcomeEmail = (name: string, siteUrl: string) => `<h1>Welcome${name ? `, ${name}` : ""}!</h1><p>Credit Card Simulator helps you explore utilisation and repayment scenarios safely.</p><p><a href="${siteUrl}">Open the simulator</a></p>`;
+export const simulationSavedEmail = (name: string, summary: string) => `<h1>Your simulation has been saved</h1><p><b>${name}</b></p><pre>${summary}</pre>`;
