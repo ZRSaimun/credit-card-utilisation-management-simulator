@@ -20,9 +20,11 @@ export type Event = {
   after: number;
   utilBefore: number;
   utilAfter: number;
+  cashBefore?: number;
+  cashAfter?: number;
 };
 export const initialCards: Card[] = [
-  ["Capital One A", "Capital One", 2250, 0, 28, 20],
+  ["Capital One A", "Capital One", 2250, 1100, 28, 20],
   ["Capital One B", "Capital One", 1000, 645, 22, 15],
   ["Barclays Rewards", "Barclays", 300, 35, 5, 30],
   ["Santander A", "Santander", 3300, 2006, undefined, 1],
@@ -75,6 +77,40 @@ export function allocation(cards: Card[]) {
     };
   });
 }
+export function planTransfersToFiftyPercent(cards: Card[]) {
+  const targets = cards.map(card => ({
+    name: card.name,
+    balance: card.balance,
+    target: card.limit * 0.5,
+    excess: Math.max(0, card.balance - card.limit * 0.5),
+    room: Math.max(0, card.limit * 0.5 - card.balance),
+  }));
+  const donors = targets.filter(card => card.excess > 0).map(card => ({ ...card }));
+  const receivers = targets.filter(card => card.room > 0).map(card => ({ ...card }));
+  const transfers: Array<{ source: string; destination: string; amount: number }> = [];
+  let i = 0, j = 0;
+  while (i < donors.length && j < receivers.length) {
+    const amount = Math.min(donors[i].excess, receivers[j].room);
+    if (amount > 0) {
+      transfers.push({ source: donors[i].name, destination: receivers[j].name, amount });
+      donors[i].excess -= amount;
+      receivers[j].room -= amount;
+    }
+    if (donors[i].excess <= 0.005) i++;
+    if (receivers[j].room <= 0.005) j++;
+  }
+  const repayments = donors.filter(card => card.excess > 0.005).map(card => ({ card: card.name, amount: card.excess }));
+  const transferTotal = transfers.reduce((sum, transfer) => sum + transfer.amount, 0);
+  const repaymentTotal = repayments.reduce((sum, repayment) => sum + repayment.amount, 0);
+  return {
+    transfers,
+    repayments,
+    transferTotal,
+    repaymentTotal,
+    totalExcess: targets.reduce((sum, card) => sum + card.excess, 0),
+    availableRoom: targets.reduce((sum, card) => sum + card.room, 0),
+  };
+}
 export function totalFees(spend: number, fee: number, months: number) {
   return (spend * months * fee) / 100;
 }
@@ -121,99 +157,180 @@ export function simulateCycle(
     payment: number;
     external: number;
     fee: number;
+    startingCash?: number;
+    monthlyCashInflow?: number;
+    incomeDay?: number;
   },
 ) {
+  // All card repayments must be funded from the simulated cash account.
+  // Internal transfers conserve total debt; cash income and repayments are
+  // represented as separate, auditable ledger events.
   const events: Event[] = [];
-  let total = summary(cards).balance;
-  const add = (
+  const state = new Map(cards.map((c) => [c.name, { ...c }]));
+  const limit = summary(cards).limit;
+  let total = Array.from(state.values()).reduce((sum, c) => sum + c.balance, 0);
+  let cashBalance = Math.max(0, o.startingCash || 0);
+
+  const emit = (
     date: string,
     type: string,
     source: string,
     destination: string,
     amount: number,
     reason: string,
+    cardName: string | undefined,
     delta: number,
+    totalDelta: number = delta,
+    cashDelta: number = 0,
   ) => {
     const before = total;
-    total = Math.max(0, total + delta);
+    const cashBefore = cashBalance;
+    const card = cardName ? state.get(cardName) : undefined;
+    const cardBefore = card?.balance;
+    if (card) card.balance = Math.max(0, card.balance + delta);
+    total = Math.max(0, total + totalDelta);
+    cashBalance = Math.max(0, cashBalance + cashDelta);
     events.push({
       date,
       type,
       source,
       destination,
-      amount,
+      amount: Math.max(0, amount),
       reason,
       before,
       after: total,
-      utilBefore: (before / summary(cards).limit) * 100,
-      utilAfter: (total / summary(cards).limit) * 100,
-    });
+      utilBefore: limit ? (before / limit) * 100 : 0,
+      utilAfter: limit ? (total / limit) * 100 : 0,
+      cashBefore,
+      cashAfter: cashBalance,
+      ...(card
+        ? {
+            cardBefore,
+            cardAfter: card.balance,
+            cardUtilBefore: card.limit ? ((cardBefore || 0) / card.limit) * 100 : 0,
+            cardUtilAfter: card.limit ? (card.balance / card.limit) * 100 : 0,
+          }
+        : {}),
+    } as Event);
   };
-  for (let m = 0; m < o.months; m++) {
-    const date = new Date(`${o.start}T00:00:00Z`);
-    date.setUTCMonth(date.getUTCMonth() + m);
-    const d = date.toISOString().slice(0, 10);
-    cards.forEach((card) => {
-      if (card.statement) {
-        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-        const statementDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.statement, lastDay))).toISOString().slice(0, 10);
-        add(statementDate, "Statement generation", card.name, "Ledger", 0, "Simulated card statement", 0);
-      }
-      if (card.dd && o.payment) {
-        const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-        const ddDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(card.dd, lastDay))).toISOString().slice(0, 10);
-        const eligibleBalance = cards.filter((c) => c.dd).reduce((sum, c) => sum + c.balance, 0);
-        const share = (card.balance / Math.max(1, eligibleBalance)) * o.payment;
-        add(ddDate, "Direct Debit", "Simulated bank account", card.name, share, "Proportional simulated repayment", -share);
-      }
-    });
-    add(
-      d,
-      "Statement",
-      "Card issuers",
-      "Ledger",
-      0,
-      "Monthly statement generation",
-      0,
-    );
-    if (o.spend)
-      add(
-        d,
-        "New spending",
-        "User",
-        "Cards",
-        o.spend,
-        "Recurring simulated spending",
-        o.spend,
-      );
-    if (o.fee) {
-      const f = (o.spend * o.fee) / 100;
-      add(d, "Fee", "Transfer facility", "Cards", f, "Transfer fee", f);
+
+  for (let month = 0; month < o.months; month++) {
+    const base = new Date(`${o.start}T00:00:00Z`);
+    base.setUTCMonth(base.getUTCMonth() + month);
+    const year = base.getUTCFullYear();
+    const monthIndex = base.getUTCMonth();
+    const monthLastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+    const iso = (day: number) =>
+      new Date(Date.UTC(year, monthIndex, Math.min(day, monthLastDay)))
+        .toISOString()
+        .slice(0, 10);
+
+    type Scheduled = { date: string; kind: "statement" | "dd" | "income" | "oneoff"; card?: Card };
+    const scheduled: Scheduled[] = [];
+    for (const card of state.values()) {
+      if (card.statement) scheduled.push({ date: iso(card.statement), kind: "statement", card });
+      if (card.dd) scheduled.push({ date: iso(card.dd), kind: "dd", card });
     }
-    if (o.payment && !cards.some((card) => card.dd))
-      add(
-        d,
-        "Simulated repayment",
-        "User",
-        "Cards",
-        o.payment,
-        "Simulated user payment",
-        -o.payment,
+    if (o.monthlyCashInflow && o.monthlyCashInflow > 0) {
+      scheduled.push({ date: iso(Math.min(28, Math.max(1, o.incomeDay || 1))), kind: "income" });
+    }
+    if (month === 0 && o.external > 0) scheduled.push({ date: iso(1), kind: "oneoff" });
+    const priority: Record<Scheduled["kind"], number> = { dd: 0, oneoff: 1, statement: 2, income: 3 };
+    scheduled.sort((a, b) => a.date.localeCompare(b.date) || priority[a.kind] - priority[b.kind]);
+    // Spending is recorded on day 1 as the current model's timing assumption.
+    if (o.spend > 0) {
+      let remaining = o.spend;
+      const ordered = Array.from(state.values()).sort(
+        (a, b) => (b.limit * 0.5 - b.balance) - (a.limit * 0.5 - a.balance),
       );
-    if (m === 0 && o.external)
-      add(
-        d,
-        "Accounting adjustment",
-        "External payment / loss",
-        "Ledger",
-        o.external,
-        "One-time £1,821 item",
-        -o.external,
-      );
-    add(d, "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", 0);
+      for (const card of ordered) {
+        if (remaining <= 0) break;
+        const room = Math.max(0, card.limit * 0.5 - card.balance);
+        const amount = Math.min(remaining, room);
+        if (amount > 0) {
+          emit(iso(1), "New spending", "User", card.name, amount, "Balanced simulated spending", card.name, amount);
+          remaining -= amount;
+        }
+      }
+      if (remaining > 0) {
+        const overTargetOrder = Array.from(state.values()).sort(
+          (a, b) => (b.limit - b.balance) - (a.limit - a.balance),
+        );
+        for (const card of overTargetOrder) {
+          if (remaining <= 0) break;
+          const available = Math.max(0, card.limit - card.balance);
+          const amount = Math.min(remaining, available);
+          if (amount > 0) {
+            emit(iso(1), "New spending", "User", card.name, amount, "Spend beyond 50% headroom; flagged", card.name, amount);
+            remaining -= amount;
+          }
+        }
+      }
+      if (remaining > 0) {
+        emit(iso(1), "Rejected spending", "User", "Cards", remaining, "No available credit; rejected", undefined, 0);
+      }
+    }
+
+    const paymentCards = Array.from(state.values()).filter(card => card.dd);
+    const paymentBalanceTotal = paymentCards.reduce((sum, card) => sum + card.balance, 0);
+    const repaymentPlan = new Map(paymentCards.map(card => [
+      card.name,
+      Math.min(card.balance, paymentBalanceTotal > 0 ? Math.max(0, o.payment) * (card.balance / paymentBalanceTotal) : 0),
+    ]));
+
+    for (const item of scheduled) {
+      if (item.kind === "income") {
+        emit(item.date, "Cash inflow", "External income", "Simulated bank account", o.monthlyCashInflow || 0,
+          "Monthly cash added to the payment account; unused cash carries forward", undefined, 0, 0, o.monthlyCashInflow || 0);
+      } else if (item.kind === "statement") {
+        emit(item.date, "Statement generation", item.card!.name, "Ledger", 0, "Simulated card statement", undefined, 0);
+      } else if (item.kind === "oneoff") {
+        const requested = Math.max(0, o.external);
+        const funded = Math.min(requested, total);
+        if (funded > 0) {
+          emit(item.date, "One-time cash funding", "External source", "Simulated bank account", funded,
+            "Explicit external funds supplied for the selected one-time payment", undefined, 0, 0, funded);
+          emit(item.date, "Accounting adjustment", "Simulated bank account", "Card balances", funded,
+            "One-time payment applied from its explicitly modelled funding source", undefined, 0, -funded, -funded);
+          const balances = Array.from(state.values());
+          const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
+          let remaining = funded;
+          balances.forEach((card, index) => {
+            if (remaining <= 0 || balanceTotal <= 0) return;
+            const amount = index === balances.length - 1 ? remaining : Math.min(card.balance, funded * (card.balance / balanceTotal));
+            if (amount > 0) {
+              emit(item.date, "Adjustment allocation", "Accounting adjustment", card.name, amount,
+                "Card-level allocation of the funded one-time payment", card.name, -amount, 0);
+              remaining -= amount;
+            }
+          });
+        }
+      } else if (item.kind === "dd") {
+        const card = item.card!;
+        const requested = Math.min(card.balance, repaymentPlan.get(card.name) || 0);
+        const paid = Math.min(requested, cashBalance);
+        if (paid > 0) {
+          emit(item.date, "Direct Debit", "Simulated bank account", card.name, paid,
+            "Cash-funded simulated repayment", card.name, -paid, -paid, -paid);
+        }
+        if (requested > paid) {
+          emit(item.date, "Unfunded Direct Debit", "Simulated bank account", card.name, requested - paid,
+            "Insufficient cash available on this date; unpaid portion does not reduce debt", undefined, 0);
+        }
+      }
+    }
+
+    if (o.fee > 0 && o.spend > 0) {
+      const fee = (o.spend * o.fee) / 100;
+      emit(iso(1), "Fee", "Transfer facility", "Cards", fee, "Transfer fee", undefined, fee);
+    }
+    emit(iso(monthLastDay), "Cash balance", "Simulated bank account", "Next month", cashBalance,
+      "Closing cash carries forward to the next month", undefined, 0);
+    emit(iso(monthLastDay), "End-of-month", "Ledger", "Ledger", 0, "Roll-forward checkpoint", undefined, 0);
   }
   return events.sort((a, b) => a.date.localeCompare(b.date));
 }
+
 export function exportCSV(cards: Card[]) {
   const rows = [
     "Card,Provider,Limit,Balance,Statement day,Direct Debit day,APR,Utilisation",
@@ -247,8 +364,8 @@ export function downloadBlob(
   a.click();
   URL.revokeObjectURL(a.href);
 }
-export function buildReport(cards: Card[], status: any, events: Event[] = []) {
+export function buildReport(cards: Card[], status: any, events: Event[] = [], adjustment = 0) {
   const s = summary(cards);
-  return `CREDIT CARD UTILISATION MANAGEMENT SIMULATOR\nSIMULATION ONLY\n\nEXECUTIVE SUMMARY\nTotal limit: ${formatGBP(s.limit)}\nTotal balance: ${formatGBP(s.balance)}\nUtilisation: ${s.util}%\n50% target: ${formatGBP(s.target)}\nDifference: ${formatGBP(s.diff)}\nCards above 50%: ${s.above}\n\nFEASIBILITY\n${status.label}\n${status.detail}\n\nASSUMPTIONS\nTransfer fee default: 0%\nExternal payment during recurring cycle: £0\nOne-time accounting adjustment: £1,821, shown separately\nMissing dates are never guessed.\n\nACCOUNTING RECONCILIATION\nOpening debt + new spending + fees - simulated repayments - external payments - approved adjustments = closing debt.\n\nEVENTS\n${events.map((e) => `${e.date} | ${e.type} | ${e.amount} | ${e.reason}`).join("\n")}`;
+  return `CREDIT CARD UTILISATION MANAGEMENT SIMULATOR\nSIMULATION ONLY\n\nEXECUTIVE SUMMARY\nTotal limit: ${formatGBP(s.limit)}\nTotal balance: ${formatGBP(s.balance)}\nUtilisation: ${s.util}%\n50% target: ${formatGBP(s.target)}\nDifference: ${formatGBP(s.diff)}\nCards above 50%: ${s.above}\n\nFEASIBILITY\n${status.label}\n${status.detail}\n\nASSUMPTIONS\nTransfer fee default: 0%\nExternal payment during recurring cycle: £0\nCurrent 50% gap: ${formatGBP(s.diff)}\nOne-time adjustment modelled: ${formatGBP(adjustment)}\nMissing dates are never guessed.\n\nACCOUNTING RECONCILIATION\nOpening debt + new spending + fees - simulated repayments - external payments - approved adjustments = closing debt.\n\nEVENTS\n${events.map((e) => `${e.date} | ${e.type} | ${e.amount} | ${e.reason}`).join("\n")}`;
 }
 
