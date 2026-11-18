@@ -174,12 +174,13 @@ export function simulateCycle(
     reason: string,
     cardName: string | undefined,
     delta: number,
+    totalDelta: number = delta,
   ) => {
     const before = total;
     const card = cardName ? state.get(cardName) : undefined;
     const cardBefore = card?.balance;
     if (card) card.balance = Math.max(0, card.balance + delta);
-    total = Math.max(0, total + delta);
+    total = Math.max(0, total + totalDelta);
     events.push({
       date,
       type,
@@ -276,14 +277,16 @@ export function simulateCycle(
     if (month === 0 && o.external > 0) {
       const balances = Array.from(state.values());
       const balanceTotal = balances.reduce((sum, card) => sum + card.balance, 0);
-      let adjustmentRemaining = Math.min(o.external, balanceTotal);
+      const appliedAdjustment = Math.min(o.external, balanceTotal);
+      emit(iso(1), "Accounting adjustment", "External payment / loss", "Ledger", appliedAdjustment, "One-time accounting adjustment", undefined, -appliedAdjustment);
+      let adjustmentRemaining = appliedAdjustment;
       balances.forEach((card, index) => {
         if (adjustmentRemaining <= 0 || balanceTotal <= 0) return;
         const amount = index === balances.length - 1
           ? adjustmentRemaining
-          : Math.min(card.balance, o.external * (card.balance / balanceTotal));
+          : Math.min(card.balance, appliedAdjustment * (card.balance / balanceTotal));
         if (amount > 0) {
-          emit(iso(1), "Accounting adjustment", "External payment / loss", card.name, amount, "One-time adjustment allocated proportionally", card.name, -amount);
+          emit(iso(1), "Adjustment allocation", "Accounting adjustment", card.name, amount, "Card-level allocation of one-time adjustment", card.name, -amount, 0);
           adjustmentRemaining -= amount;
         }
       });
