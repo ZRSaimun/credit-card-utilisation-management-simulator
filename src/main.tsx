@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import "./styles.css";
 import {
@@ -18,7 +16,7 @@ import {
   downloadBlob,
 } from "./model";
 import { amortisation, dailyInterest, effectiveAnnualRate, fixedPayment, payoffMonths } from "./financialMath";
-import { CloudScenarioRow, CloudSession, deleteCloudScenario, listCloudScenarios, readCloudSession, saveCloudScenario, signInCloudUser, signOutCloudUser, signUpCloudUser } from "./supabase";
+import { CloudScenarioRow, CloudScenarioVersionRow, CloudSession, deleteCloudScenario, getCloudSession, listCloudScenarioVersions, listCloudScenarios, saveCloudScenario, signInCloudUser, signOutCloudUser, signUpCloudUser, subscribeCloudAuth } from "./supabase";
 type ScenarioSettings = {
   external: boolean;
   spend: number;
@@ -117,10 +115,12 @@ function App() {
   const [scenarioName, setScenarioName] = useState("Assignment scenario");
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(readSavedScenarios);
   const [scenarioMessage, setScenarioMessage] = useState("");
-  const [cloudSession, setCloudSession] = useState<CloudSession | null>(readCloudSession);
+  const [cloudSession, setCloudSession] = useState<CloudSession | null>(null);
   const [cloudEmail, setCloudEmail] = useState("");
   const [cloudPassword, setCloudPassword] = useState("");
   const [cloudRows, setCloudRows] = useState<CloudScenarioRow[]>([]);
+  const [cloudVersions, setCloudVersions] = useState<Record<string, CloudScenarioVersionRow[]>>({});
+  const [expandedCloudScenario, setExpandedCloudScenario] = useState<string | null>(null);
   const [cloudMessage, setCloudMessage] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
 
@@ -133,23 +133,30 @@ function App() {
     return result.rows;
   };
   useEffect(() => {
-    const stored = readCloudSession();
-    if (!stored) return;
     let cancelled = false;
-    void listCloudScenarios(stored).then(result => {
-      if (!cancelled) {
-        setCloudSession(result.session);
-        setCloudRows(result.rows);
-        setCloudMessage("Secure cloud storage connected.");
+    const restore = async () => {
+      try {
+        const stored = await getCloudSession();
+        if (!stored) return;
+        const result = await listCloudScenarios(stored);
+        if (!cancelled) {
+          setCloudSession(result.session);
+          setCloudRows(result.rows);
+          setCloudMessage("Secure cloud storage connected.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCloudSession(null);
+          setCloudRows([]);
+          setCloudMessage("Could not restore cloud session: " + String((error as Error).message || error));
+        }
       }
-    }).catch(error => {
-      if (!cancelled) {
-        setCloudSession(null);
-        setCloudRows([]);
-        setCloudMessage("Could not restore cloud session: " + String(error.message || error));
-      }
+    };
+    void restore();
+    const unsubscribe = subscribeCloudAuth(session => {
+      if (!cancelled && session) setCloudSession(session);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; unsubscribe(); };
   }, []);
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
@@ -343,6 +350,8 @@ function App() {
     catch { /* Local session is cleared even if the network sign-out fails. */ }
     setCloudSession(null);
     setCloudRows([]);
+    setCloudVersions({});
+    setExpandedCloudScenario(null);
     setCloudMessage("Signed out. Cloud scenario data remains in your account.");
     setCloudBusy(false);
   };
@@ -398,6 +407,22 @@ function App() {
       setCloudMessage("Could not delete cloud scenario: " + String((error as Error).message || error));
     } finally { setCloudBusy(false); }
   };
+  const toggleCloudHistory = async (row: CloudScenarioRow) => {
+    if (!cloudSession) return;
+    if (expandedCloudScenario === row.scenario_id) {
+      setExpandedCloudScenario(null);
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const result = await listCloudScenarioVersions(cloudSession, row.scenario_id);
+      setCloudSession(result.session);
+      setCloudVersions(current => ({ ...current, [row.scenario_id]: result.rows }));
+      setExpandedCloudScenario(row.scenario_id);
+    } catch (error) {
+      setCloudMessage("Could not load history: " + String((error as Error).message || error));
+    } finally { setCloudBusy(false); }
+  };
   const save = (c: Card) => {
     if (!c.name || c.limit <= 0 || c.balance < 0) return;
     if (edit?.name) {
@@ -413,7 +438,8 @@ function App() {
     selectedMonthEvents.forEach((event: any) => rows.push([event.date, event.type, event.source, event.destination, event.amount.toFixed(2), event.reason]));
     downloadBlob(rows.map(row => row.map(value => '"' + String(value ?? "").replaceAll('"', '""') + '"').join(",")).join("\n"), "monthly-plan-" + selectedCycleMonth + ".csv", "text/csv");
   };
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const add = (n, data) =>
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), n);
@@ -1062,7 +1088,7 @@ function App() {
           {cloudSession ? <>
             <div className="cloud-account"><span>Signed in as</span><b>{cloudSession.user.email || cloudSession.user.id}</b><button onClick={handleCloudSignOut} disabled={cloudBusy}>Sign out</button></div>
             <div className="cloud-save-row"><button onClick={saveCurrentToCloud} disabled={cloudBusy}>Save current scenario to cloud</button><button onClick={()=>void reloadCloudScenarios(cloudSession).then(()=>setCloudMessage("Cloud scenarios refreshed.")).catch(error=>setCloudMessage("Refresh failed: "+String(error.message||error)))} disabled={cloudBusy}>Refresh list</button></div>
-            {cloudRows.length ? <div className="saved-scenario-list">{cloudRows.map(row=><article className="saved-scenario" key={row.scenario_id}><div><b>{row.name}</b><small>Saved {new Date(row.saved_at).toLocaleString()} · {(row.payload.cards || []).length} cards</small></div><div className="saved-scenario-actions"><button onClick={()=>loadCloudScenario(row)}>Load</button><button onClick={()=>void removeCloudScenario(row)} disabled={cloudBusy}>Delete</button></div></article>)}</div> : <p className="muted">No cloud scenarios yet. Save the current setup to get started.</p>}
+            {cloudRows.length ? <div className="saved-scenario-list">{cloudRows.map(row=><article className="saved-scenario cloud-scenario" key={row.scenario_id}><div><b>{row.name}</b><small>Saved {new Date(row.saved_at).toLocaleString()} · {(row.payload.cards || []).length} cards</small></div><div className="saved-scenario-actions"><button onClick={()=>loadCloudScenario(row)}>Load</button><button onClick={()=>void toggleCloudHistory(row)} disabled={cloudBusy}>{expandedCloudScenario === row.scenario_id ? "Hide history" : "History"}</button><button onClick={()=>void removeCloudScenario(row)} disabled={cloudBusy}>Delete</button></div>{expandedCloudScenario === row.scenario_id && <div className="cloud-history">{(cloudVersions[row.scenario_id] || []).length ? cloudVersions[row.scenario_id].map(version=><div className="cloud-history-row" key={version.id}><span>Version saved {new Date(version.created_at).toLocaleString()}</span><button onClick={()=>loadCloudScenario(version)}>Restore</button></div>) : <small>No earlier versions yet.</small>}</div>}</article>)}</div> : <p className="muted">No cloud scenarios yet. Save the current setup to get started.</p>}
           </> : <>
             <div className="controls cloud-auth"><label>Email<input type="email" autoComplete="email" value={cloudEmail} onChange={e=>setCloudEmail(e.target.value)} placeholder="you@example.com"/></label><label>Password<input type="password" autoComplete="current-password" value={cloudPassword} onChange={e=>setCloudPassword(e.target.value)} placeholder="At least 8 characters"/></label></div>
             <div className="actions"><button onClick={()=>void handleCloudSignIn()} disabled={cloudBusy}>Sign in</button><button onClick={()=>void handleCloudSignUp()} disabled={cloudBusy}>Create account</button></div>
@@ -1097,7 +1123,8 @@ function App() {
             <button onClick={() => exportCSV(cards)}>Export CSV</button>
             <button onClick={exportXlsx}>Export Excel workbook</button>
             <button
-              onClick={() => {
+              onClick={async () => {
+                const { jsPDF } = await import("jspdf");
                 const doc = new jsPDF();
                 doc.setFontSize(16);
                 doc.text(

@@ -79,6 +79,12 @@ nav{position:sticky;top:10px;z-index:10;background:#f3f6f8cc;backdrop-filter:blu
 .dark-mode .cloud-account button,.dark-mode .cloud-save-row button{background:#55d5a6;color:#08251e;border-color:#55d5a6}
 .dark-mode .cloud-privacy-note{border-color:#38515d}
 @media(max-width:560px){.cloud-sync .controls{grid-template-columns:1fr}.cloud-sync{padding:16px 12px}.cloud-account{align-items:flex-start;flex-direction:column}.cloud-account b{flex:auto}.cloud-save-row button{flex:1}}
+.cloud-scenario{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+.cloud-history{grid-column:1/-1;padding:12px 0 0;border-top:1px solid #dce7eb;margin-top:4px}
+.cloud-history-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;font-size:.76rem;color:#637283}
+.cloud-history-row button{border:1px solid #cce9da;border-radius:8px;padding:6px 10px;background:#effaf4;color:#147e5a;font:600 .72rem Manrope;cursor:pointer}
+.dark-mode .cloud-history{border-color:#38515d}.dark-mode .cloud-history-row{color:#afc0c6}.dark-mode .cloud-history-row button{background:#12342c;border-color:#23795e;color:#8ae7bd}
+@media(max-width:560px){.cloud-scenario{grid-template-columns:1fr}.cloud-history-row{align-items:flex-start;flex-direction:column}}
 
 .audit-panel{margin-top:18px;border-color:#d7e8ed;background:linear-gradient(135deg,#fff 0%,#f7fbfc 100%)}
 .audit-panel>.row{margin-bottom:8px}
