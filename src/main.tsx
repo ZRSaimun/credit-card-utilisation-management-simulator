@@ -162,13 +162,21 @@ function App() {
   const s = useMemo(() => summary(cards), [cards]);
   const a = useMemo(() => allocation(cards), [cards]);
   const transferPlan = useMemo(() => planTransfersToFiftyPercent(cards), [cards]);
-  const chartData = useMemo(() => cards.map((c) => ({ name: c.name.replace("Capital One ", "CO "), utilisation: +(c.balance / c.limit * 100).toFixed(1) })), [cards]);
+  const chartData = useMemo(() => cards.map((c) => ({ name: c.name, utilisation: c.balance / c.limit * 100 })), [cards]);
   const scenarioData = useMemo(() => [{ name: "Current", balance: s.balance }, { name: "50% target", balance: s.target }, { name: "Every card ≤50%", balance: a.reduce((sum,item)=>sum+item.result,0) }, { name: "30% target", balance: s.limit*.3 }, { name: "25% target", balance: s.limit*.25 }, { name: "After 50% gap payment", balance: s.target }], [s,a]);
   const cardDateEvents = useMemo(() => [
     ...cards.flatMap(c => [{ day:c.statement, type:"Statement", card:c.name }, { day:c.dd, type:"Direct Debit", card:c.name }].filter(x=>x.day).map(x=>({ ...x, date:"Day " + x.day }))),
     ...(cashBudget > 0 ? [{ day:paydayDay, type:"Cash inflow", card:"Simulated payment account", date:"Day " + paydayDay }] : []),
   ].sort((x,y)=>(x.day as number)-(y.day as number)), [cards, cashBudget, paydayDay]);
-  const transferPreview = useMemo(() => { const source=cards.find(c=>c.name===transferSource), destination=cards.find(c=>c.name===transferDestination); const amount=Math.max(0,Math.min(transferAmount,source?.balance||0,(destination?.limit||0)-(destination?.balance||0))); const feeAmount=amount*transferFee/100; return {source,destination,amount,feeAmount,totalDebtChange:feeAmount}; }, [cards,transferSource,transferDestination,transferAmount,transferFee]);
+  const transferPreview = useMemo(() => {
+    const source = cards.find(c => c.name === transferSource);
+    const destination = cards.find(c => c.name === transferDestination);
+    const rate = Math.max(0, transferFee) / 100;
+    const room = (destination?.limit ?? 0) - (destination?.balance ?? 0);
+    const amount = Math.max(0, Math.floor(Math.min(transferAmount, source?.balance ?? 0, room / (1 + rate)) * 100) / 100);
+    const feeAmount = Math.round(amount * rate * 100) / 100;
+    return { source, destination, amount, feeAmount, totalDebtChange: feeAmount };
+  }, [cards, transferSource, transferDestination, transferAmount, transferFee]);
   const cardSpendTotal = useMemo(() => Object.values(spendByCard).reduce((sum, value) => sum + (value || 0), 0), [spendByCard]);
   const events = useMemo(
     () => simulateCycle(cards, {
@@ -832,7 +840,7 @@ function App() {
             Reallocation cannot reduce total debt without repayment or external
             money.
           </p>
-          <div className="transfer-builder"><div className="row"><div><h3>Transfer builder</h3><p className="muted">Preview a simulated card-to-card transfer. No real transfer is created.</p></div><span className="pill green">LEDGER PREVIEW</span></div><div className="controls"><label>Source card<select value={transferSource} onChange={e=>setTransferSource(e.target.value)}><option value="">Choose source</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Destination card<select value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">Choose destination</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Transfer amount<input type="number" min="0" value={transferAmount} onChange={e=>setTransferAmount(+e.target.value)}/></label><label>Fee %<input type="number" min="0" value={transferFee} onChange={e=>setTransferFee(+e.target.value)}/></label></div>{transferPreview.source&&transferPreview.destination&&transferPreview.source!==transferPreview.destination&&<div className="transfer-preview"><p><b>{formatGBP(transferPreview.amount)}</b> moves from {transferPreview.source.name} to {transferPreview.destination.name}.</p><p>Source after: <b>{formatGBP(transferPreview.source.balance-transferPreview.amount)}</b> · Destination after: <b>{formatGBP(transferPreview.destination.balance+transferPreview.amount)}</b></p><p className="warning">Total debt change: <b>+{formatGBP(transferPreview.totalDebtChange)}</b> from fees. The transfer itself creates no debt reduction.</p></div>}</div>
+          <div className="transfer-builder"><div className="row"><div><h3>Transfer builder</h3><p className="muted">Preview a simulated card-to-card transfer. No real transfer is created.</p></div><span className="pill green">LEDGER PREVIEW</span></div><div className="controls"><label>Source card<select value={transferSource} onChange={e=>setTransferSource(e.target.value)}><option value="">Choose source</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Destination card<select value={transferDestination} onChange={e=>setTransferDestination(e.target.value)}><option value="">Choose destination</option>{cards.map(c=><option value={c.name}>{c.name}</option>)}</select></label><label>Transfer amount<input type="number" min="0" value={transferAmount} onChange={e=>setTransferAmount(+e.target.value)}/></label><label>Fee %<input type="number" min="0" value={transferFee} onChange={e=>setTransferFee(+e.target.value)}/></label></div>{transferPreview.source&&transferPreview.destination&&transferPreview.source!==transferPreview.destination&&<div className="transfer-preview"><p><b>{formatGBP(transferPreview.amount)}</b> moves from {transferPreview.source.name} to {transferPreview.destination.name}.</p><p>Source after: <b>{formatGBP(transferPreview.source.balance-transferPreview.amount)}</b> · Destination after: <b>{formatGBP(transferPreview.destination.balance+transferPreview.amount+transferPreview.feeAmount)}</b></p><p className="warning">Total debt change: <b>+{formatGBP(transferPreview.totalDebtChange)}</b> from fees. The transfer itself creates no debt reduction.</p></div>}</div>
           <section className="suggested-transfer-plan">
             <div className="row"><div><h3>Suggested simulated transfer plan</h3><p className="muted">Routes move existing balances into cards with room below 50%.</p></div><span className="pill green">0% FEE ASSUMPTION</span></div>
             <div className="plan-totals"><div><span>Can be reallocated</span><b>{formatGBP(transferPlan.transferTotal)}</b></div><div><span>Repayment still required</span><b>{formatGBP(transferPlan.repaymentTotal)}</b></div></div>
@@ -1146,20 +1154,8 @@ function App() {
             <button onClick={exportXlsx}>Export Excel workbook</button>
             <button
               onClick={async () => {
-                const { jsPDF } = await import("jspdf");
-                const doc = new jsPDF();
-                doc.setFontSize(16);
-                doc.text(
-                  "Credit Card Utilisation Management Simulator",
-                  14,
-                  18,
-                );
-                doc.setFontSize(9);
-                doc.text(
-                  doc.splitTextToSize(buildReport(cards, status, events, external ? s.diff : 0), 180),
-                  14,
-                  28,
-                );
+                const { createReportPdf } = await import("./reportPdf");
+                const doc = createReportPdf(buildReport(cards, status, events, external ? s.diff : 0));
                 doc.save("simulation-report.pdf");
               }}
             >
